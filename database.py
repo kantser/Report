@@ -1,5 +1,6 @@
 import sqlite3
 import bcrypt
+import streamlit as st
 
 def init_db():
     conn = sqlite3.connect('report.db')
