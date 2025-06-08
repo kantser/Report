@@ -1,8 +1,5 @@
-import streamlit as st
-import pandas as pd
 import database as db
 from fpdf import FPDF
-from io import BytesIO
 import os
 
 def generate_pdf_from_data(org_id, start_date, end_date, executor_id, project_manager_id, report_filename):

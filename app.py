@@ -1,8 +1,4 @@
 import streamlit as st
-# import sqlite3 # Удален, так как перемещен в database.py
-# import bcrypt # Удален, так как перемещен в database.py
-# from pathlib import Path # Удален, так как не используется напрямую в app.py
-# import pandas as pd # Удален, так как перемещен в ui.py
 import database # Импортируем новый модуль для работы с БД
 import ui # Будет импортирован после создания ui.py
 
@@ -14,8 +10,6 @@ if 'current_user' not in st.session_state:
 if 'theme' not in st.session_state:
     st.session_state.theme = 'dark' # По умолчанию темная тема
 
-# Все функции, связанные с базой данных, теперь находятся в database.py
-# Все функции, связанные с UI, теперь будут в ui.py
 
 def main():
     # Инициализация базы данных
@@ -26,7 +20,7 @@ def main():
     else:
         ui.display_sidebar()
 
-        if st.session_state.menu_choice == "Главная":
+        if st.session_state.menu_choice == "Главная страница":
             ui.display_home_page()
         
         elif st.session_state.menu_choice == "Ведение пользователей":

@@ -1,6 +1,5 @@
 import sqlite3
 import bcrypt
-from pathlib import Path
 
 def init_db():
     conn = sqlite3.connect('report.db')
