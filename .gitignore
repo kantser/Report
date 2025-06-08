@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+.Python
+env/
+venv/
+*.env
+.venv/
+
+# Streamlit
+.streamlit/
+streamlit_static/
+
+# SQLite
+*.db
+
+# Font cache files
+*.pkl
+*.cw127.pkl
+
+# IDEs
+.idea/
+.vscode/ 
