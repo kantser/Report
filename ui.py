@@ -15,6 +15,8 @@ def display_login_form():
             if user:
                 st.session_state.authenticated = True
                 st.session_state.current_user = user
+                st.session_state.current_user_id = db.get_user_id_by_username(user)
+                st.session_state.menu_choice = "Главная страница"
                 st.rerun()
             else:
                 st.error("Неверный логин или пароль")
@@ -26,31 +28,56 @@ def display_sidebar():
     if 'menu_choice' not in st.session_state:
         st.session_state.menu_choice = "Главная страница"
 
-    if st.sidebar.button("Главная страница", use_container_width=True):
-        st.session_state.menu_choice = "Главная страница"
+    user_roles = db.get_user_roles(st.session_state.current_user_id) if hasattr(st.session_state, 'current_user_id') else []
+    is_admin = 'Администратор' in [r[1] for r in user_roles]
+
+    menu_items = [
+        'Главная страница',
+        'Ведение пользователей',
+        'Ведение ролей',
+        'Назначение ролей',
+        'Назначение полномочий',
+        'Ведение организаций',
+        'Ведение исполнителей',
+        'Ведение руководителей проекта',
+        'Выход'
+    ]
+
+    if is_admin:
+        allowed_menu_items = set(menu_items)
+    else:
+        allowed_menu_items = set()
+        for role in user_roles:
+            allowed_menu_items.update(db.get_allowed_menu_items_for_role(role[0]))
+
+    # Главная страница
+    if 'Главная страница' in allowed_menu_items:
+        if st.sidebar.button("Главная страница", use_container_width=True):
+            st.session_state.menu_choice = "Главная страница"
 
     st.sidebar.divider()
 
-    if st.sidebar.button("Ведение пользователей", use_container_width=True):
-        st.session_state.menu_choice = "Ведение пользователей"
-    if st.sidebar.button("Ведение ролей", use_container_width=True):
-        st.session_state.menu_choice = "Ведение ролей"
-    if st.sidebar.button("Назначение ролей", use_container_width=True):
-        st.session_state.menu_choice = "Назначение ролей"
+    # Блок управления пользователями и ролями
+    for item in ['Ведение пользователей', 'Ведение ролей', 'Назначение ролей', 'Назначение полномочий']:
+        if item in allowed_menu_items:
+            if st.sidebar.button(item, use_container_width=True):
+                st.session_state.menu_choice = item
 
     st.sidebar.divider()
 
+    # Блок справочников
     with st.sidebar.expander("Ведение справочников", expanded=True):
-        if st.sidebar.button("Ведение организаций", use_container_width=True):
-            st.session_state.menu_choice = "Ведение организаций"
-        if st.sidebar.button("Ведение исполнителей", use_container_width=True):
-            st.session_state.menu_choice = "Ведение исполнителей"
-        if st.sidebar.button("Ведение руководителей проекта", use_container_width=True):
-            st.session_state.menu_choice = "Ведение руководителей проекта"
-    
+        for item in ['Ведение организаций', 'Ведение исполнителей', 'Ведение руководителей проекта']:
+            if item in allowed_menu_items:
+                if st.sidebar.button(item, use_container_width=True):
+                    st.session_state.menu_choice = item
+
     st.sidebar.divider()
-    if st.sidebar.button("Выход", on_click=lambda: st.session_state.update(authenticated=False, current_user=None), use_container_width=True):
-        st.rerun()
+    if 'Выход' in allowed_menu_items:
+        if st.sidebar.button("Выход", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.current_user = None
+            st.rerun()
     st.sidebar.markdown("Разработано компанией NaviTech 2025")
 
 def display_home_page():
@@ -520,4 +547,31 @@ def display_project_manager_management():
         df_project_managers = pd.DataFrame(project_managers, columns=["ID", "Имя", "Фамилия", "Отчество"])
         st.dataframe(df_project_managers, hide_index=True)
     else:
-        st.info("Руководители проекта пока не добавлены.") 
+        st.info("Руководители проекта пока не добавлены.")
+
+def display_role_permissions_management():
+    st.title("Назначение полномочий ролям")
+    roles = db.get_all_roles()
+    menu_items = [
+        'Главная страница',
+        'Ведение пользователей',
+        'Ведение ролей',
+        'Назначение ролей',
+        'Назначение полномочий',
+        'Ведение организаций',
+        'Ведение исполнителей',
+        'Ведение руководителей проекта',
+        'Выход'
+    ]
+    role_options = {role[1]: role[0] for role in roles}
+    selected_role_name = st.selectbox("Выберите роль", list(role_options.keys()))
+    selected_role_id = role_options[selected_role_name]
+    current_permissions = db.get_role_permissions(selected_role_id)
+    st.write("Отметьте пункты меню, которые будут доступны для этой роли:")
+    new_permissions = {}
+    for item in menu_items:
+        new_permissions[item] = st.checkbox(item, value=current_permissions.get(item, 0) == 1)
+    if st.button("Сохранить полномочия"):
+        db.set_role_permissions(selected_role_id, new_permissions)
+        st.success("Полномочия успешно сохранены!")
+        st.rerun() 

@@ -39,6 +39,8 @@ def main():
             ui.display_project_manager_management()
         elif st.session_state.menu_choice == "Формирование отчета":
             ui.display_report_form()
+        elif st.session_state.menu_choice == "Назначение полномочий":
+            ui.display_role_permissions_management()
 
 if __name__ == "__main__":
     main()

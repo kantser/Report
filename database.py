@@ -23,6 +23,7 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS user_roles
                  (user_id INTEGER,
                   role_id INTEGER,
+                  UNIQUE(user_id, role_id),
                   FOREIGN KEY (user_id) REFERENCES users (id),
                   FOREIGN KEY (role_id) REFERENCES roles (id))''')
     
@@ -66,6 +67,15 @@ def init_db():
                   FOREIGN KEY (executor_id) REFERENCES executors (id),
                   FOREIGN KEY (project_manager_id) REFERENCES project_managers (id))''')
     
+    # Создание таблицы разрешений для ролей
+    c.execute('''CREATE TABLE IF NOT EXISTS role_permissions (
+        role_id INTEGER,
+        menu_item TEXT,
+        allowed INTEGER DEFAULT 0,
+        UNIQUE(role_id, menu_item),
+        FOREIGN KEY (role_id) REFERENCES roles (id)
+    )''')
+    
     # Добавление ролей по умолчанию
     c.execute("INSERT OR IGNORE INTO roles (name) VALUES ('Администратор'), ('Пользователь')")
     
@@ -73,6 +83,32 @@ def init_db():
     admin_password = bcrypt.hashpw('admin'.encode('utf-8'), bcrypt.gensalt())
     c.execute("INSERT OR IGNORE INTO users (username, password) VALUES (?, ?)",
               ('admin', admin_password))
+    
+    # Назначение роли 'Администратор' пользователю 'admin'
+    c.execute("SELECT id FROM users WHERE username = 'admin'")
+    admin_user_id = c.fetchone()[0]
+    c.execute("SELECT id FROM roles WHERE name = 'Администратор'")
+    admin_role_id = c.fetchone()[0]
+    c.execute("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)", (admin_user_id, admin_role_id))
+    
+    # Получаем id роли 'Администратор'
+    c.execute("SELECT id FROM roles WHERE name = 'Администратор'")
+    admin_role_id = c.fetchone()[0]
+    # Список всех пунктов меню
+    menu_items = [
+        'Главная страница',
+        'Ведение пользователей',
+        'Ведение ролей',
+        'Назначение ролей',
+        'Назначение полномочий',
+        'Ведение организаций',
+        'Ведение исполнителей',
+        'Ведение руководителей проекта',
+        'Выход'
+    ]
+    # Для администратора разрешить все
+    for item in menu_items:
+        c.execute("INSERT OR IGNORE INTO role_permissions (role_id, menu_item, allowed) VALUES (?, ?, 1)", (admin_role_id, item))
     
     conn.commit()
     conn.close()
@@ -358,4 +394,36 @@ def get_project_manager_by_id(pm_id):
     c.execute("SELECT first_name, last_name, middle_name FROM project_managers WHERE id = ?", (pm_id,))
     pm = c.fetchone()
     conn.close()
-    return f"{pm[1]} {pm[0]} {pm[2] if pm[2] else ''}".strip() if pm else None 
+    return f"{pm[1]} {pm[0]} {pm[2] if pm[2] else ''}".strip() if pm else None
+
+def get_role_permissions(role_id):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("SELECT menu_item, allowed FROM role_permissions WHERE role_id = ?", (role_id,))
+    permissions = c.fetchall()
+    conn.close()
+    return dict(permissions)
+
+def set_role_permissions(role_id, permissions_dict):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    for menu_item, allowed in permissions_dict.items():
+        c.execute("INSERT OR REPLACE INTO role_permissions (role_id, menu_item, allowed) VALUES (?, ?, ?)", (role_id, menu_item, int(allowed)))
+    conn.commit()
+    conn.close()
+
+def get_allowed_menu_items_for_role(role_id):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("SELECT menu_item FROM role_permissions WHERE role_id = ? AND allowed = 1", (role_id,))
+    items = [row[0] for row in c.fetchall()]
+    conn.close()
+    return items
+
+def get_user_id_by_username(username):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("SELECT id FROM users WHERE username = ?", (username,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else None 
