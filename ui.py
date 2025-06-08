@@ -131,7 +131,7 @@ def display_report_form():
     
     organizations = db.get_all_organizations()
     org_options = {org[1]: org[0] for org in organizations}
-    selected_org_name = st.selectbox("ООО МРС", list(org_options.keys()))
+    selected_org_name = st.selectbox("Компания", list(org_options.keys()))
     selected_org_id = org_options.get(selected_org_name)
 
     col1, col2 = st.columns(2)
