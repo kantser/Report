@@ -60,42 +60,49 @@ def display_sidebar():
         if st.sidebar.button("Главная страница", use_container_width=True):
             st.session_state.menu_choice = "Главная страница"
 
-    st.sidebar.markdown(
-        "<div style='font-weight:600; font-size:16px; margin-bottom:0; margin-top:10px;'>Управление пользователями</div>",
-        unsafe_allow_html=True
-    )
-    st.sidebar.markdown("<hr style='margin-top:4px; margin-bottom:8px;'>", unsafe_allow_html=True)
-
-    # Блок управления пользователями и ролями
-    for item in ['Ведение пользователей', 'Ведение ролей', 'Назначение ролей', 'Назначение полномочий']:
-        if item in allowed_menu_items:
-            if st.sidebar.button(item, use_container_width=True):
-                st.session_state.menu_choice = item
-
-    st.sidebar.markdown(
-        "<div style='font-weight:600; font-size:16px; margin-bottom:0; margin-top:10px;'>Ведение справочников</div>",
-        unsafe_allow_html=True
-    )
-    st.sidebar.markdown("<hr style='margin-top:4px; margin-bottom:8px;'>", unsafe_allow_html=True)
-
-    # Блок справочников
-    with st.sidebar.expander("Ведение справочников", expanded=True):
-        for item in ['Ведение организаций', 'Ведение исполнителей', 'Ведение руководителей проекта']:
+    # --- Управление пользователями ---
+    user_management_items = ['Ведение пользователей', 'Ведение ролей', 'Назначение ролей', 'Назначение полномочий']
+    has_user_management = any(item in allowed_menu_items for item in user_management_items)
+    if has_user_management:
+        st.sidebar.markdown(
+            "<div style='font-weight:600; font-size:16px; margin-bottom:0; margin-top:10px;'>Управление пользователями</div>",
+            unsafe_allow_html=True
+        )
+        st.sidebar.markdown("<hr style='margin-top:4px; margin-bottom:8px;'>", unsafe_allow_html=True)
+        for item in user_management_items:
             if item in allowed_menu_items:
                 if st.sidebar.button(item, use_container_width=True):
                     st.session_state.menu_choice = item
 
-    st.sidebar.markdown(
-        "<div style='font-weight:600; font-size:16px; margin-bottom:0; margin-top:10px;'>Системные действия</div>",
-        unsafe_allow_html=True
-    )
-    st.sidebar.markdown("<hr style='margin-top:4px; margin-bottom:8px;'>", unsafe_allow_html=True)
+    # --- Ведение справочников ---
+    reference_items = ['Ведение организаций', 'Ведение исполнителей', 'Ведение руководителей проекта']
+    has_reference_management = any(item in allowed_menu_items for item in reference_items)
+    if has_reference_management:
+        st.sidebar.markdown(
+            "<div style='font-weight:600; font-size:16px; margin-bottom:0; margin-top:10px;'>Ведение справочников</div>",
+            unsafe_allow_html=True
+        )
+        st.sidebar.markdown("<hr style='margin-top:4px; margin-bottom:8px;'>", unsafe_allow_html=True)
+        with st.sidebar.expander("Ведение справочников", expanded=True):
+            for item in reference_items:
+                if item in allowed_menu_items:
+                    if st.sidebar.button(item, use_container_width=True):
+                        st.session_state.menu_choice = item
 
-    if 'Выход' in allowed_menu_items:
-        if st.sidebar.button("Выход", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.current_user = None
-            st.rerun()
+    # --- Системные действия ---
+    system_items = ['Выход']
+    has_system_actions = any(item in allowed_menu_items for item in system_items)
+    if has_system_actions:
+        st.sidebar.markdown(
+            "<div style='font-weight:600; font-size:16px; margin-bottom:0; margin-top:10px;'>Системные действия</div>",
+            unsafe_allow_html=True
+        )
+        st.sidebar.markdown("<hr style='margin-top:4px; margin-bottom:8px;'>", unsafe_allow_html=True)
+        if 'Выход' in allowed_menu_items:
+            if st.sidebar.button("Выход", use_container_width=True):
+                st.session_state.authenticated = False
+                st.session_state.current_user = None
+                st.rerun()
     st.sidebar.markdown("Разработано компанией NaviTech© 2025")
 
 def display_home_page():
