@@ -23,7 +23,12 @@ def display_login_form():
 
 def display_sidebar():
     st.sidebar.write(f"Текущий пользователь: {st.session_state.current_user}")
-    st.sidebar.title("Меню")
+
+    st.sidebar.markdown(
+        "<div style='font-weight:600; font-size:16px; margin-bottom:0; margin-top:10px;'>Меню пользователя</div>",
+        unsafe_allow_html=True
+    )
+    st.sidebar.markdown("<hr style='margin-top:4px; margin-bottom:8px;'>", unsafe_allow_html=True)
 
     if 'menu_choice' not in st.session_state:
         st.session_state.menu_choice = "Главная страница"
@@ -55,7 +60,11 @@ def display_sidebar():
         if st.sidebar.button("Главная страница", use_container_width=True):
             st.session_state.menu_choice = "Главная страница"
 
-    st.sidebar.divider()
+    st.sidebar.markdown(
+        "<div style='font-weight:600; font-size:16px; margin-bottom:0; margin-top:10px;'>Управление пользователями</div>",
+        unsafe_allow_html=True
+    )
+    st.sidebar.markdown("<hr style='margin-top:4px; margin-bottom:8px;'>", unsafe_allow_html=True)
 
     # Блок управления пользователями и ролями
     for item in ['Ведение пользователей', 'Ведение ролей', 'Назначение ролей', 'Назначение полномочий']:
@@ -63,7 +72,11 @@ def display_sidebar():
             if st.sidebar.button(item, use_container_width=True):
                 st.session_state.menu_choice = item
 
-    st.sidebar.divider()
+    st.sidebar.markdown(
+        "<div style='font-weight:600; font-size:16px; margin-bottom:0; margin-top:10px;'>Ведение справочников</div>",
+        unsafe_allow_html=True
+    )
+    st.sidebar.markdown("<hr style='margin-top:4px; margin-bottom:8px;'>", unsafe_allow_html=True)
 
     # Блок справочников
     with st.sidebar.expander("Ведение справочников", expanded=True):
@@ -72,13 +85,18 @@ def display_sidebar():
                 if st.sidebar.button(item, use_container_width=True):
                     st.session_state.menu_choice = item
 
-    st.sidebar.divider()
+    st.sidebar.markdown(
+        "<div style='font-weight:600; font-size:16px; margin-bottom:0; margin-top:10px;'>Системные действия</div>",
+        unsafe_allow_html=True
+    )
+    st.sidebar.markdown("<hr style='margin-top:4px; margin-bottom:8px;'>", unsafe_allow_html=True)
+
     if 'Выход' in allowed_menu_items:
         if st.sidebar.button("Выход", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.current_user = None
             st.rerun()
-    st.sidebar.markdown("Разработано компанией NaviTech 2025")
+    st.sidebar.markdown("Разработано компанией NaviTech© 2025")
 
 def display_home_page():
     st.title("Главная страница")
