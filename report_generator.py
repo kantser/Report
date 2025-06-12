@@ -1,44 +1,58 @@
 import database as db
-from fpdf import FPDF
 import os
+from PyPDF2 import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from io import BytesIO
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+# Определяем текущую директорию
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def create_overlay(org_name, start_date, end_date, executor_full_name, pm_full_name):
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+
+    # Путь к TTF-шрифту
+    font_path = os.path.join(CURRENT_DIR, 'fonts', 'DejaVuSansCondensed.ttf')
+
+    # Регистрируем шрифт (один раз за сессию)
+    pdfmetrics.registerFont(TTFont('DejaVu', font_path))
+
+    c.setFont("DejaVu", 16)
+    c.drawCentredString(297, 680, "Отчет по результатам мониторинга информационной безопасности")
+    c.setFont("DejaVu", 12)
+    c.drawCentredString(297, 650, org_name)
+    c.drawCentredString(297, 630, f"За период с {start_date} по {end_date} года")
+    c.setFont("DejaVu", 12)
+    c.drawString(60, 120, f"Исполнил: {executor_full_name}")
+    c.drawString(60, 100, f"Руководитель проекта: {pm_full_name}")
+    c.save()
+    buffer.seek(0)
+    return buffer
 
 def generate_pdf_from_data(org_id, start_date, end_date, executor_id, project_manager_id, report_filename):
     org_name = db.get_organization_by_id(org_id)
     executor_full_name = db.get_executor_by_id(executor_id)
     pm_full_name = db.get_project_manager_by_id(project_manager_id)
 
-    current_dir = os.path.dirname(__file__)
-    font_path_regular = os.path.join(current_dir, 'fonts', 'DejaVuSansCondensed.ttf')
-    font_path_bold = os.path.join(current_dir, 'fonts', 'DejaVuSansCondensed-Bold.ttf')
+    # Путь к шаблону PDF
+    template_path = os.path.join(CURRENT_DIR, 'templates', 'main_pdf_template.pdf')
 
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.add_font('DejaVuSansCondensed', '', font_path_regular, uni=True)
-    pdf.add_font('DejaVuSansCondensed', 'B', font_path_bold, uni=True)
-    pdf.set_font('DejaVuSansCondensed', '', 12)
+    # Генерируем наложение с текстом
+    overlay_buffer = create_overlay(org_name, start_date, end_date, executor_full_name, pm_full_name)
+    overlay_pdf = PdfReader(overlay_buffer)
+    template_pdf = PdfReader(template_path)
+    writer = PdfWriter()
 
-    # Верхний правый угол
-    pdf.set_xy(150, 10)
-    pdf.cell(0, 10, 'Конфиденциально', 0, 1, 'R')
-    pdf.set_xy(150, 15)
-    pdf.cell(0, 10, 'Экз №____', 0, 1, 'R')
-    pdf.ln(30)
-    
-    pdf.set_font('DejaVuSansCondensed', 'B', 16)
-    pdf.multi_cell(0, 10, 'Отчет по результатам мониторинга информационной безопасности', 0, 'C')
-    pdf.ln(10)
+    template_page = template_pdf.pages[0]
+    overlay_page = overlay_pdf.pages[0]
+    template_page.merge_page(overlay_page)
+    writer.add_page(template_page)
 
-    pdf.set_font('DejaVuSansCondensed', '', 12)
-    pdf.multi_cell(0, 10, f'{org_name}', 0, 'C')
-    pdf.multi_cell(0, 10, f'За период с {start_date} по {end_date} года', 0, 'C')
-    pdf.ln(140)
-    
-    pdf.set_x(20)
-    pdf.cell(0, 10, f'Исполнил: {executor_full_name}', 0, 1, 'L')
-    pdf.set_x(20)
-    pdf.cell(0, 10, f'Руководитель проекта: {pm_full_name}', 0, 1, 'L')
-
-
-    pdf_output = pdf.output(dest='S').encode('latin1')
-    
-    return pdf_output 
+    output_buffer = BytesIO()
+    writer.write(output_buffer)
+    output_buffer.seek(0)
+    pdf_output = output_buffer.read()
+    return pdf_output
