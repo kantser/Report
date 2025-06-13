@@ -309,7 +309,7 @@ def create_statistical_section_overlay(num_licenses, control_list_data, num_inci
     y_position -= 20
     c.drawString(60, y_position, f"— Количество документов находящихся на постоянном контроле: {num_controlled_docs}")
     y_position -= 20
-    c.drawString(60, y_position, f"— Выявлено лиц с нарушением регламента рабочего времени: {num_time_violations} (ФИО)")
+    c.drawString(60, y_position, f"— Выявлено лиц с нарушением регламента рабочего времени: {num_time_violations}")
     y_position -= 20
 
     # НЕ вызываем c.showPage() здесь, так как управление страницами теперь в generate_full_pdf_from_data
