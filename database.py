@@ -407,7 +407,30 @@ def get_report(report_id):
 def get_all_reports():
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("SELECT id, organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id, num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations FROM reports")
+    c.execute("""SELECT
+        r.id,
+        o.name,
+        r.start_date,
+        r.end_date,
+        e.first_name,
+        e.last_name,
+        e.middle_name,
+        pm.first_name,
+        pm.last_name,
+        pm.middle_name,
+        r.report_filename,
+        r.num_licenses,
+        r.control_list_json,
+        r.num_incidents_section1,
+        r.num_blocked_resources,
+        r.num_unidentified_carriers,
+        r.num_info_messages,
+        r.num_controlled_docs,
+        r.num_time_violations
+    FROM reports r
+    JOIN organizations o ON r.organization_id = o.id
+    JOIN executors e ON r.executor_id = e.id
+    JOIN project_managers pm ON r.project_manager_id = pm.id""")
     reports = c.fetchall()
     conn.close()
     return reports

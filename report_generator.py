@@ -370,21 +370,10 @@ def generate_full_pdf_from_data(org_id, start_date, end_date, executor_id, proje
         statistical_template_page.merge_page(statistical_overlay_page)
         writer.add_page(statistical_template_page)
 
-    # Сохраняем объединенный PDF
-    final_report_path = os.path.join(CURRENT_DIR, 'reports', report_filename)
-    # Создаем директорию reports, если она не существует
-    os.makedirs(os.path.dirname(final_report_path), exist_ok=True)
-    
     # Создаем буфер для записи PDF
     output_buffer = BytesIO()
     writer.write(output_buffer)
     output_buffer.seek(0)
-    
-    # Сохраняем файл на диск
-    with open(final_report_path, 'wb') as output_pdf:
-        output_pdf.write(output_buffer.getvalue())
-    
-    print(f"Отчет успешно создан: {final_report_path}")
     
     # Возвращаем содержимое файла для скачивания
     return output_buffer.getvalue()
