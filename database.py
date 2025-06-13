@@ -38,7 +38,8 @@ def init_db():
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   first_name TEXT,
                   last_name TEXT,
-                  middle_name TEXT)''')
+                  middle_name TEXT,
+                  position_id INTEGER REFERENCES positions(id))''')
     
     # Создание таблицы руководителей проекта
     c.execute('''CREATE TABLE IF NOT EXISTS project_managers
@@ -48,11 +49,11 @@ def init_db():
                   middle_name TEXT)''')
     
     # Создание таблицы отчетов
-    # Проверяем, существует ли старая таблица reports с колонкой report_content
+    # Проверяем, существует ли старая таблица reports с колонкой report_content или отсутствует contract_id
     c.execute("PRAGMA table_info(reports)")
     columns = [col[1] for col in c.fetchall()]
-    if "report_content" in columns:
-        c.execute("DROP TABLE reports")
+    if "report_content" in columns or "contract_id" not in columns:
+        c.execute("DROP TABLE IF EXISTS reports")
         conn.commit()
         st.warning("База данных отчетов была сброшена из-за изменения структуры. Старые отчеты удалены.")
 
@@ -63,10 +64,12 @@ def init_db():
                   end_date TEXT NOT NULL,
                   executor_id INTEGER NOT NULL,
                   project_manager_id INTEGER NOT NULL,
+                  contract_id INTEGER NOT NULL,
                   report_filename TEXT,
                   FOREIGN KEY (organization_id) REFERENCES organizations (id),
                   FOREIGN KEY (executor_id) REFERENCES executors (id),
-                  FOREIGN KEY (project_manager_id) REFERENCES project_managers (id))''')
+                  FOREIGN KEY (project_manager_id) REFERENCES project_managers (id),
+                  FOREIGN KEY (contract_id) REFERENCES contracts (id))''')
     
     # Создание таблицы разрешений для ролей
     c.execute('''CREATE TABLE IF NOT EXISTS role_permissions (
@@ -76,6 +79,23 @@ def init_db():
         UNIQUE(role_id, menu_item),
         FOREIGN KEY (role_id) REFERENCES roles (id)
     )''')
+    
+    # Создание таблицы должностей
+    c.execute('''CREATE TABLE IF NOT EXISTS positions
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT UNIQUE NOT NULL)''')
+    
+    # Создание таблицы договоров
+    c.execute('''CREATE TABLE IF NOT EXISTS contracts
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  number TEXT NOT NULL,
+                  date TEXT NOT NULL)''')
+    
+    # Миграция: добавление поля position_id в executors
+    c.execute("PRAGMA table_info(executors)")
+    columns = [col[1] for col in c.fetchall()]
+    if "position_id" not in columns:
+        c.execute("ALTER TABLE executors ADD COLUMN position_id INTEGER REFERENCES positions(id)")
     
     # Добавление ролей по умолчанию
     c.execute("INSERT OR IGNORE INTO roles (name) VALUES ('Администратор'), ('Пользователь')")
@@ -105,6 +125,8 @@ def init_db():
         'Ведение организаций',
         'Ведение исполнителей',
         'Ведение руководителей проекта',
+        'Ведение должностей',
+        'Ведение договоров',
         'Выход'
     ]
     # Для администратора разрешить все
@@ -273,25 +295,25 @@ def delete_organization(org_id):
 def get_all_executors():
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("SELECT id, first_name, last_name, middle_name FROM executors")
+    c.execute("SELECT id, first_name, last_name, middle_name, position_id FROM executors")
     executors = c.fetchall()
     conn.close()
     return executors
 
-def add_executor(first_name, last_name, middle_name):
+def add_executor(first_name, last_name, middle_name, position_id=None):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("INSERT INTO executors (first_name, last_name, middle_name) VALUES (?, ?, ?)",
-              (first_name, last_name, middle_name))
+    c.execute("INSERT INTO executors (first_name, last_name, middle_name, position_id) VALUES (?, ?, ?, ?)",
+              (first_name, last_name, middle_name, position_id))
     conn.commit()
     conn.close()
     return True
 
-def update_executor(executor_id, first_name, last_name, middle_name):
+def update_executor(executor_id, first_name, last_name, middle_name, position_id=None):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("UPDATE executors SET first_name = ?, last_name = ?, middle_name = ? WHERE id = ?",
-              (first_name, last_name, middle_name, executor_id))
+    c.execute("UPDATE executors SET first_name = ?, last_name = ?, middle_name = ?, position_id = ? WHERE id = ?",
+              (first_name, last_name, middle_name, position_id, executor_id))
     conn.commit()
     conn.close()
     return True
@@ -340,11 +362,11 @@ def delete_project_manager(manager_id):
     return True
 
 # Функции для управления отчетами
-def add_report(organization_id, start_date, end_date, executor_id, project_manager_id, report_filename):
+def add_report(organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("INSERT INTO reports (organization_id, start_date, end_date, executor_id, project_manager_id, report_filename) VALUES (?, ?, ?, ?, ?, ?)",
-              (organization_id, start_date, end_date, executor_id, project_manager_id, report_filename))
+    c.execute("INSERT INTO reports (organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+              (organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id))
     conn.commit()
     conn.close()
     return True
@@ -352,7 +374,7 @@ def add_report(organization_id, start_date, end_date, executor_id, project_manag
 def get_report(report_id):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("SELECT id, organization_id, start_date, end_date, executor_id, project_manager_id, report_filename FROM reports WHERE id = ?", (report_id,))
+    c.execute("SELECT id, organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id FROM reports WHERE id = ?", (report_id,))
     report = c.fetchone()
     conn.close()
     return report
@@ -381,13 +403,26 @@ def get_organization_by_id(org_id):
     conn.close()
     return org[0] if org else None
 
-def get_executor_by_id(exec_id):
+def get_executor_by_id(exec_id, include_position=True):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("SELECT first_name, last_name, middle_name FROM executors WHERE id = ?", (exec_id,))
-    executor = c.fetchone()
+    c.execute("SELECT e.first_name, e.last_name, e.middle_name, p.name FROM executors e LEFT JOIN positions p ON e.position_id = p.id WHERE e.id = ?", (exec_id,))
+    row = c.fetchone()
     conn.close()
-    return f"{executor[1]} {executor[0]} {executor[2] if executor[2] else ''}".strip() if executor else None
+    if row:
+        fio = f"{row[1]} {row[0]} {row[2] if row[2] else ''}".strip()
+        if include_position and row[3]:
+            return f"{fio}, {row[3]}"
+        return fio
+    return ""
+
+def get_executor_position_by_id(exec_id):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("SELECT p.name FROM executors e JOIN positions p ON e.position_id = p.id WHERE e.id = ?", (exec_id,))
+    position = c.fetchone()
+    conn.close()
+    return position[0] if position else ""
 
 def get_project_manager_by_id(pm_id):
     conn = sqlite3.connect('report.db')
@@ -427,4 +462,84 @@ def get_user_id_by_username(username):
     c.execute("SELECT id FROM users WHERE username = ?", (username,))
     row = c.fetchone()
     conn.close()
-    return row[0] if row else None 
+    return row[0] if row else None
+
+# CRUD для должностей
+
+def get_all_positions():
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("SELECT id, name FROM positions")
+    positions = c.fetchall()
+    conn.close()
+    return positions
+
+def add_position(name):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO positions (name) VALUES (?)", (name,))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def update_position(position_id, name):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("UPDATE positions SET name = ? WHERE id = ?", (name, position_id))
+    conn.commit()
+    conn.close()
+    return True
+
+def delete_position(position_id):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM positions WHERE id = ?", (position_id,))
+    conn.commit()
+    conn.close()
+    return True
+
+# CRUD для договоров
+
+def get_all_contracts():
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("SELECT id, number, date FROM contracts")
+    contracts = c.fetchall()
+    conn.close()
+    return contracts
+
+def add_contract(number, date):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO contracts (number, date) VALUES (?, ?)", (number, date))
+    conn.commit()
+    conn.close()
+    return True
+
+def update_contract(contract_id, number, date):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("UPDATE contracts SET number = ?, date = ? WHERE id = ?", (number, date, contract_id))
+    conn.commit()
+    conn.close()
+    return True
+
+def delete_contract(contract_id):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM contracts WHERE id = ?", (contract_id,))
+    conn.commit()
+    conn.close()
+    return True
+
+def get_contract_by_id(contract_id):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("SELECT number, date FROM contracts WHERE id = ?", (contract_id,))
+    contract = c.fetchone()
+    conn.close()
+    return contract if contract else None 

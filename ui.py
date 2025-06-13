@@ -45,6 +45,8 @@ def display_sidebar():
         'Ведение организаций',
         'Ведение исполнителей',
         'Ведение руководителей проекта',
+        'Ведение должностей',
+        'Ведение договоров',
         'Выход'
     ]
 
@@ -75,7 +77,7 @@ def display_sidebar():
                     st.session_state.menu_choice = item
 
     # --- Ведение справочников ---
-    reference_items = ['Ведение организаций', 'Ведение исполнителей', 'Ведение руководителей проекта']
+    reference_items = ['Ведение организаций', 'Ведение исполнителей', 'Ведение руководителей проекта', 'Ведение должностей', 'Ведение договоров']
     has_reference_management = any(item in allowed_menu_items for item in reference_items)
     if has_reference_management:
         st.sidebar.markdown(
@@ -140,7 +142,7 @@ def display_home_page():
         selected_report_id = st.selectbox("Выберите отчет для печати", report_ids, key="report_select")
 
         if selected_report_id is not None:
-            # report_data теперь содержит: id, organization_id, start_date, end_date, executor_id, project_manager_id, report_filename
+            # report_data теперь содержит: id, organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id
             report_data = db.get_report(selected_report_id)
             if report_data:
                 # Извлекаем сырые данные для генерации PDF
@@ -150,8 +152,9 @@ def display_home_page():
                 executor_id = report_data[4]
                 project_manager_id = report_data[5]
                 report_filename = report_data[6] # report_filename now at index 6
+                contract_id = report_data[7] # contract_id now at index 7
 
-                pdf_output = rg.generate_pdf_from_data(org_id, start_date, end_date, executor_id, project_manager_id, report_filename)
+                pdf_output = rg.generate_pdf_from_data(org_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id)
 
                 col1, col2 = st.columns(2, gap="small")
                 with col1:
@@ -180,7 +183,8 @@ def display_home_page():
 
 def display_report_form():
     st.title("Формирование отчета")
-    
+    st.markdown("<h3 style='margin-bottom: 1em;'>Формирование главной страницы</h3>", unsafe_allow_html=True)
+
     organizations = db.get_all_organizations()
     org_options = {org[1]: org[0] for org in organizations}
     selected_org_name = st.selectbox("Компания", list(org_options.keys()))
@@ -192,25 +196,33 @@ def display_report_form():
     with col2:
         end_date = st.date_input("по")
 
+    contracts = db.get_all_contracts()
+    contract_options = {f"{c[1]} от {c[2]}": c[0] for c in contracts}
+    selected_contract = st.selectbox("Договор", list(contract_options.keys())) if contract_options else None
+    selected_contract_id = contract_options.get(selected_contract) if selected_contract else None
+
+    positions = db.get_all_positions()
+    pos_options = {p[1]: p[0] for p in positions}
+    selected_position = st.selectbox("Должность исполнителя", list(pos_options.keys())) if pos_options else None
+    selected_position_id = pos_options.get(selected_position) if selected_position else None
+
     executors = db.get_all_executors()
-    exec_options = {f"{e[2]} {e[1]} {e[3] if e[3] else ''}".strip(): e[0] for e in executors}
-    selected_exec_name = st.selectbox("Исполнил", list(exec_options.keys()))
-    selected_exec_id = exec_options.get(selected_exec_name)
+    filtered_executors = [e for e in executors if e[4] == selected_position_id] if selected_position_id else executors
+    exec_options = {f"{e[2]} {e[1]} {e[3] if e[3] else ''}".strip(): e[0] for e in filtered_executors}
+    selected_exec_name = st.selectbox("Исполнил", list(exec_options.keys())) if exec_options else None
+    selected_exec_id = exec_options.get(selected_exec_name) if selected_exec_name else None
 
     project_managers = db.get_all_project_managers()
     pm_options = {f"{pm[2]} {pm[1]} {pm[3] if pm[3] else ''}".strip(): pm[0] for pm in project_managers}
     selected_pm_name = st.selectbox("Руководитель проекта", list(pm_options.keys()))
     selected_pm_id = pm_options.get(selected_pm_name)
 
-    if st.button("Сформировать"):
-        if selected_org_id and selected_exec_id and selected_pm_id:
-            # Генерация имени файла для отчета
+    # Кнопка формирования только главной страницы (PDF)
+    if st.button("Сформировать отчет"):
+        if selected_org_id and selected_exec_id and selected_pm_id and selected_contract_id:
             report_filename = f"Отчет_{selected_org_name}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.pdf"
-
-            db.add_report(selected_org_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), selected_exec_id, selected_pm_id, report_filename)
-
-            pdf_output = rg.generate_pdf_from_data(selected_org_id, start_date.strftime('%d.%m.%Y'), end_date.strftime('%d.%m.%Y'), selected_exec_id, selected_pm_id, report_filename)
-            
+            db.add_report(selected_org_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), selected_exec_id, selected_pm_id, report_filename, selected_contract_id)
+            pdf_output = rg.generate_pdf_from_data(selected_org_id, start_date.strftime('%d.%m.%Y'), end_date.strftime('%d.%m.%Y'), selected_exec_id, selected_pm_id, report_filename, selected_contract_id)
             st.success("Отчет успешно сформирован и сохранен!")
             st.download_button(
                 label="Скачать отчет в PDF",
@@ -457,20 +469,24 @@ def display_organization_management():
 def display_executor_management():
     st.title("Ведение исполнителей")
 
+    positions = db.get_all_positions()
+    pos_options = {p[1]: p[0] for p in positions}
+
     with st.expander("Добавить нового исполнителя"):
         with st.form("add_executor_form"):
             new_exec_first_name = st.text_input("Имя исполнителя")
             new_exec_last_name = st.text_input("Фамилия исполнителя")
             new_exec_middle_name = st.text_input("Отчество исполнителя (необязательно)")
+            new_exec_position = st.selectbox("Должность", list(pos_options.keys())) if pos_options else None
             add_exec_submit = st.form_submit_button("Добавить исполнителя")
 
             if add_exec_submit:
-                if new_exec_first_name and new_exec_last_name:
-                    db.add_executor(new_exec_first_name, new_exec_last_name, new_exec_middle_name)
+                if new_exec_first_name and new_exec_last_name and new_exec_position:
+                    db.add_executor(new_exec_first_name, new_exec_last_name, new_exec_middle_name, pos_options[new_exec_position])
                     st.success(f"Исполнитель {new_exec_first_name} {new_exec_last_name} успешно добавлен!")
                     st.rerun()
                 else:
-                    st.error("Имя и фамилия исполнителя не могут быть пустыми.")
+                    st.error("Имя, фамилия и должность исполнителя не могут быть пустыми.")
 
     executors = db.get_all_executors()
     if executors:
@@ -478,28 +494,25 @@ def display_executor_management():
             with st.form("edit_delete_executor_form"):
                 exec_ids = [exec[0] for exec in executors]
                 selected_exec_id = st.selectbox("Выберите исполнителя по ID", exec_ids)
-                
                 selected_exec = next((exec for exec in executors if exec[0] == selected_exec_id), None)
-                
                 if selected_exec:
                     edit_exec_first_name = st.text_input("Имя", value=selected_exec[1])
                     edit_exec_last_name = st.text_input("Фамилия", value=selected_exec[2])
                     edit_exec_middle_name = st.text_input("Отчество", value=selected_exec[3] if selected_exec[3] else "")
-
+                    edit_exec_position = st.selectbox("Должность", list(pos_options.keys()),
+                        index=list(pos_options.values()).index(selected_exec[4]) if selected_exec[4] in pos_options.values() else 0) if pos_options else None
                     col1, col2 = st.columns(2)
                     with col1:
                         update_exec_submit = st.form_submit_button("Обновить исполнителя")
                     with col2:
                         delete_exec_submit = st.form_submit_button("Удалить исполнителя")
-
                     if update_exec_submit:
-                        if edit_exec_first_name and edit_exec_last_name:
-                            db.update_executor(selected_exec_id, edit_exec_first_name, edit_exec_last_name, edit_exec_middle_name)
+                        if edit_exec_first_name and edit_exec_last_name and edit_exec_position:
+                            db.update_executor(selected_exec_id, edit_exec_first_name, edit_exec_last_name, edit_exec_middle_name, pos_options[edit_exec_position])
                             st.success("Исполнитель успешно обновлен!")
                             st.rerun()
                         else:
-                            st.error("Имя и фамилия исполнителя не могут быть пустыми.")
-                    
+                            st.error("Имя, фамилия и должность исполнителя не могут быть пустыми.")
                     if delete_exec_submit:
                         db.delete_executor(selected_exec_id)
                         st.success("Исполнитель успешно удален!")
@@ -509,7 +522,14 @@ def display_executor_management():
 
     st.subheader("Существующие исполнители")
     if executors:
-        df_executors = pd.DataFrame(executors, columns=["ID", "Имя", "Фамилия", "Отчество"])
+        # Получаем названия должностей для отображения
+        pos_dict = {p[0]: p[1] for p in positions}
+        data = []
+        for e in executors:
+            data.append([
+                e[0], e[1], e[2], e[3], pos_dict.get(e[4], "-")
+            ])
+        df_executors = pd.DataFrame(data, columns=["ID", "Имя", "Фамилия", "Отчество", "Должность"])
         st.dataframe(df_executors, hide_index=True)
     else:
         st.info("Исполнители пока не добавлены.")
@@ -586,6 +606,8 @@ def display_role_permissions_management():
         'Ведение организаций',
         'Ведение исполнителей',
         'Ведение руководителей проекта',
+        'Ведение должностей',
+        'Ведение договоров',
         'Выход'
     ]
     role_options = {role[1]: role[0] for role in roles}
@@ -599,4 +621,65 @@ def display_role_permissions_management():
     if st.button("Сохранить полномочия"):
         db.set_role_permissions(selected_role_id, new_permissions)
         st.success("Полномочия успешно сохранены!")
-        st.rerun() 
+        st.rerun()
+
+def display_position_management():
+    st.title("Ведение должностей")
+    with st.expander("Добавить новую должность"):
+        with st.form("add_position_form"):
+            new_position_name = st.text_input("Название должности")
+            add_position_submit = st.form_submit_button("Добавить должность")
+            if add_position_submit:
+                if new_position_name:
+                    if db.add_position(new_position_name):
+                        st.success(f"Должность '{new_position_name}' успешно добавлена!")
+                        st.rerun()
+                    else:
+                        st.error(f"Должность с названием '{new_position_name}' уже существует.")
+                else:
+                    st.error("Название должности не может быть пустым.")
+    positions = db.get_all_positions()
+    st.subheader("Список должностей")
+    for pos in positions:
+        col1, col2 = st.columns([3,1])
+        with col1:
+            st.write(pos[1])
+        with col2:
+            if st.button(f"Удалить", key=f"del_pos_{pos[0]}"):
+                db.delete_position(pos[0])
+                st.success("Должность удалена!")
+                st.rerun()
+
+def display_contract_management():
+    st.title("Ведение договоров")
+    with st.expander("Добавить новый договор"):
+        with st.form("add_contract_form"):
+            new_contract_number = st.text_input("Номер договора")
+            new_contract_date = st.date_input("Дата договора")
+            add_contract_submit = st.form_submit_button("Добавить договор")
+            if add_contract_submit:
+                if new_contract_number and new_contract_date:
+                    db.add_contract(new_contract_number, new_contract_date.strftime('%Y-%m-%d'))
+                    st.success(f"Договор '{new_contract_number}' успешно добавлен!")
+                    st.rerun()
+                else:
+                    st.error("Номер и дата договора не могут быть пустыми.")
+    contracts = db.get_all_contracts()
+    st.subheader("Список договоров")
+    for contract in contracts:
+        col1, col2 = st.columns([3,1])
+        with col1:
+            st.write(f"{contract[1]} от {contract[2]}")
+        with col2:
+            if st.button(f"Удалить", key=f"del_contract_{contract[0]}"):
+                db.delete_contract(contract[0])
+                st.success("Договор удалён!")
+                st.rerun()
+
+if __name__ == "__main__":
+    if st.session_state.menu_choice == "Ведение должностей":
+        display_position_management()
+    elif st.session_state.menu_choice == "Ведение договоров":
+        display_contract_management()
+    else:
+        display_home_page() 

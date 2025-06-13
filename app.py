@@ -41,6 +41,10 @@ def main():
             ui.display_report_form()
         elif st.session_state.menu_choice == "Назначение полномочий":
             ui.display_role_permissions_management()
+        elif st.session_state.menu_choice == "Ведение должностей":
+            ui.display_position_management()
+        elif st.session_state.menu_choice == "Ведение договоров":
+            ui.display_contract_management()
 
 if __name__ == "__main__":
     main()
