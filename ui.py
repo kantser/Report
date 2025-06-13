@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import database as db
 import report_generator as rg
+import json
 
 def display_login_form():
     st.title("Вход в систему")
@@ -154,7 +155,28 @@ def display_home_page():
                 report_filename = report_data[6] # report_filename now at index 6
                 contract_id = report_data[7] # contract_id now at index 7
 
-                pdf_output = rg.generate_pdf_from_data(org_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id)
+                # Извлекаем все статистические данные для полной версии отчета
+                num_licenses = report_data[8]
+                control_list_json = report_data[9]
+                num_incidents_section1 = report_data[10]
+                num_blocked_resources = report_data[11]
+                num_unidentified_carriers = report_data[12]
+                num_info_messages = report_data[13]
+                num_controlled_docs = report_data[14]
+                num_time_violations = report_data[15]
+
+                # Десериализуем JSON-строку обратно в список словарей
+                control_list_data = json.loads(control_list_json) if control_list_json else []
+                # Добавляем автонумерацию строк
+                for idx, row in enumerate(control_list_data, 1):
+                    row['№ п/п'] = idx
+
+                # Теперь вызываем generate_full_pdf_from_data для загрузки полного отчета
+                pdf_output = rg.generate_full_pdf_from_data(
+                    org_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
+                    num_licenses, control_list_data, num_incidents_section1, num_blocked_resources,
+                    num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations
+                )
 
                 col1, col2 = st.columns(2, gap="small")
                 with col1:
@@ -182,6 +204,11 @@ def display_home_page():
         st.info("Отчеты пока не сформированы.")
 
 def display_report_form():
+    if 'control_list_df' not in st.session_state or st.session_state.current_page == 'report_form': # Reset table when entering report form
+        st.session_state.control_list_df = pd.DataFrame(
+            columns=['№ п/п', 'Должность', 'ФИО', 'Наименование ПЭВМ в ИС Заказчика', 'Период контроля']
+        )
+    st.session_state.current_page = 'report_form' # Track current page
     st.title("Формирование отчета")
     st.markdown("<h3 style='margin-bottom: 1em;'>Формирование главной страницы</h3>", unsafe_allow_html=True)
 
@@ -217,12 +244,105 @@ def display_report_form():
     selected_pm_name = st.selectbox("Руководитель проекта", list(pm_options.keys()))
     selected_pm_id = pm_options.get(selected_pm_name)
 
-    # Кнопка формирования только главной страницы (PDF)
+    # Инициализация DataFrame для списка контроля
+    if 'control_list_df' not in st.session_state:
+        st.session_state.control_list_df = pd.DataFrame([
+            {'№ п/п': 1, 'Должность': '', 'ФИО': '', 'Наименование ПЭВМ в ИС Заказчика': '', 'Период контроля': ''}
+        ], columns=['№ п/п', 'Должность', 'ФИО', 'Наименование ПЭВМ в ИС Заказчика', 'Период контроля'])
+
+    st.markdown("<h4 style='margin-top: 1em; margin-bottom: 0.5em;'>Раздел I. Статистические сведения</h4>", unsafe_allow_html=True)
+    
+    st.markdown("<h5 style='margin-top: 0.5em; margin-bottom: 0.2em;'>— Количество задействованных лицензий</h5>", unsafe_allow_html=True)
+    num_licenses = st.number_input("", min_value=0, value=0, key="num_licenses", label_visibility="collapsed")
+
+    st.markdown("<h5 style='margin-top: 0.5em; margin-bottom: 0.2em;'>— Перечень лиц находящихся на контроле (должность, ФИО)</h5>", unsafe_allow_html=True)
+    
+    # Редактируемая таблица
+    # --- после редактирования ---
+    # Автонумерация для всех строк, даже если они пустые
+    if isinstance(st.session_state.control_list_df, pd.DataFrame):
+        st.session_state.control_list_df['№ п/п'] = range(1, len(st.session_state.control_list_df) + 1)
+
+    edited_df = st.data_editor(
+        st.session_state.control_list_df,
+        column_config={
+            "№ п/п": st.column_config.NumberColumn("№ п/п", help="Порядковый номер", min_value=1, format="%d"),
+            "Должность": st.column_config.TextColumn("Должность лица"),
+            "ФИО": st.column_config.TextColumn("ФИО лица"),
+            "Наименование ПЭВМ в ИС Заказчика": st.column_config.TextColumn("Наименование ПЭВМ в ИС Заказчика", help="Наименование ПЭВМ"),
+            "Период контроля": st.column_config.TextColumn("Период контроля", help="Период контроля (например, 'ежемесячно')")
+        },
+        hide_index=True,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="control_list_editor"
+    )
+    # Сохраняем актуальные данные обратно в session_state
+    st.session_state.control_list_df = edited_df.copy()
+
+    st.markdown("<h5 style='margin-top: 0.5em; margin-bottom: 0.2em;'>— Количество выявленных инцидентов</h5>", unsafe_allow_html=True)
+    num_incidents_section1 = st.number_input("", min_value=0, value=0, key="num_incidents_section1", label_visibility="collapsed")
+
+    st.markdown("<h5 style='margin-top: 0.5em; margin-bottom: 0.2em;'>— Количество выявленных/заблокированных вредоносных ресурсов</h5>", unsafe_allow_html=True)
+    num_blocked_resources = st.number_input("", min_value=0, value=0, key="num_blocked_resources", label_visibility="collapsed")
+
+    st.markdown("<h5 style='margin-top: 0.5em; margin-bottom: 0.2em;'>— Количество выявленных неустановленных внешних носителей</h5>", unsafe_allow_html=True)
+    num_unidentified_carriers = st.number_input("", min_value=0, value=0, key="num_unidentified_carriers", label_visibility="collapsed")
+
+    st.markdown("<h5 style='margin-top: 0.5em; margin-bottom: 0.2em;'>— Количество подготовленных информационных сообщений в адрес заказчика за месяц</h5>", unsafe_allow_html=True)
+    num_info_messages = st.number_input("", min_value=0, value=0, key="num_info_messages", label_visibility="collapsed")
+
+    st.markdown("<h5 style='margin-top: 0.5em; margin-bottom: 0.2em;'>— Количество документов находящихся на постоянном контроле</h5>", unsafe_allow_html=True)
+    num_controlled_docs = st.number_input("", min_value=0, value=0, key="num_controlled_docs", label_visibility="collapsed")
+
+    st.markdown("<h5 style='margin-top: 0.5em; margin-bottom: 0.2em;'>— Выявлено лиц с нарушением регламента рабочего времени</h5>", unsafe_allow_html=True)
+    num_time_violations = st.number_input("", min_value=0, value=0, key="num_time_violations", label_visibility="collapsed")
+
+    # Перемещенная и обновленная кнопка "Сформировать отчет" теперь в самом низу формы
     if st.button("Сформировать отчет"):
         if selected_org_id and selected_exec_id and selected_pm_id and selected_contract_id:
-            report_filename = f"Отчет_{selected_org_name}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.pdf"
-            db.add_report(selected_org_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), selected_exec_id, selected_pm_id, report_filename, selected_contract_id)
-            pdf_output = rg.generate_pdf_from_data(selected_org_id, start_date.strftime('%d.%m.%Y'), end_date.strftime('%d.%m.%Y'), selected_exec_id, selected_pm_id, report_filename, selected_contract_id)
+            # Получаем актуальные данные из data_editor непосредственно перед формированием отчета
+            # Streamlit автоматически обновляет st.session_state[key] при изменениях в виджете
+            # raw_editor_data = st.session_state.get('control_list_editor', []) # default to empty list
+            # print(f"DEBUG: raw_editor_data from session_state: {raw_editor_data}")
+
+            # Преобразуем в DataFrame
+            # if isinstance(raw_editor_data, pd.DataFrame):
+            #     processed_control_list_df = raw_editor_data
+            # else:
+            #     try:
+            #         processed_control_list_df = pd.DataFrame(raw_editor_data)
+            #     except ValueError:
+            #         # Если преобразование не удалось (например, некорректные данные или пустой список)
+            #         processed_control_list_df = pd.DataFrame(columns=[
+            #             '№ п/п', 'Должность', 'ФИО', 'Наименование ПЭВМ в ИС Заказчика', 'Период контроля'
+            #         ])
+            processed_control_list_df = st.session_state.control_list_df.copy() # Используем уже обновленный DataFrame
+            # print(f"DEBUG: processed_control_list_df after conversion: {processed_control_list_df}")
+
+            # Автонумерация для всех строк, даже если они пустые
+            if not processed_control_list_df.empty:
+                processed_control_list_df['№ п/п'] = range(1, len(processed_control_list_df) + 1)
+
+            report_filename = f"Отчет_{selected_org_name}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}_full.pdf"
+            
+            # Сохранение всех данных, включая новые поля и таблицу
+            db.add_full_report(
+                selected_org_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), 
+                selected_exec_id, selected_pm_id, report_filename, selected_contract_id,
+                num_licenses, processed_control_list_df.to_json(orient='records'), num_incidents_section1,
+                num_blocked_resources, num_unidentified_carriers, num_info_messages,
+                num_controlled_docs, num_time_violations
+            )
+            control_list_data_for_pdf = processed_control_list_df.to_dict(orient='records')
+            # print(f"DEBUG: control_list_data sent to PDF generator: {control_list_data_for_pdf}")
+            pdf_output = rg.generate_full_pdf_from_data(
+                selected_org_id, start_date.strftime('%d.%m.%Y'), end_date.strftime('%d.%m.%Y'), 
+                selected_exec_id, selected_pm_id, report_filename, selected_contract_id,
+                num_licenses, control_list_data_for_pdf, num_incidents_section1,
+                num_blocked_resources, num_unidentified_carriers, num_info_messages,
+                num_controlled_docs, num_time_violations
+            )
             st.success("Отчет успешно сформирован и сохранен!")
             st.download_button(
                 label="Скачать отчет в PDF",
@@ -231,7 +351,7 @@ def display_report_form():
                 mime="application/pdf"
             )
         else:
-            st.error("Пожалуйста, заполните все поля.")
+            st.error("Пожалуйста, заполните все обязательные поля для формирования отчета.")
 
 def display_user_management():
     st.title("Ведение пользователей")
@@ -551,135 +671,3 @@ def display_project_manager_management():
                     st.rerun()
                 else:
                     st.error("Имя и фамилия руководителя проекта не могут быть пустыми.")
-
-    project_managers = db.get_all_project_managers()
-    if project_managers:
-        with st.expander("Редактировать или удалить руководителя проекта"):
-            with st.form("edit_delete_pm_form"):
-                pm_ids = [pm[0] for pm in project_managers]
-                selected_pm_id = st.selectbox("Выберите руководителя проекта по ID", pm_ids)
-                
-                selected_pm = next((pm for pm in project_managers if pm[0] == selected_pm_id), None)
-                
-                if selected_pm:
-                    edit_pm_first_name = st.text_input("Имя", value=selected_pm[1])
-                    edit_pm_last_name = st.text_input("Фамилия", value=selected_pm[2])
-                    edit_pm_middle_name = st.text_input("Отчество", value=selected_pm[3] if selected_pm[3] else "")
-
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        update_pm_submit = st.form_submit_button("Обновить руководителя проекта")
-                    with col2:
-                        delete_pm_submit = st.form_submit_button("Удалить руководителя проекта")
-
-                    if update_pm_submit:
-                        if edit_pm_first_name and edit_pm_last_name:
-                            db.update_project_manager(selected_pm_id, edit_pm_first_name, edit_pm_last_name, edit_pm_middle_name)
-                            st.success("Руководитель проекта успешно обновлен!")
-                            st.rerun()
-                        else:
-                            st.error("Имя и фамилия руководителя проекта не могут быть пустыми.")
-                    
-                    if delete_pm_submit:
-                        db.delete_project_manager(selected_pm_id)
-                        st.success("Руководитель проекта успешно удален!")
-                        st.rerun()
-    else:
-        st.info("Пока нет руководителей проекта для редактирования или удаления.")
-
-    st.subheader("Существующие руководители проекта")
-    if project_managers:
-        df_project_managers = pd.DataFrame(project_managers, columns=["ID", "Имя", "Фамилия", "Отчество"])
-        st.dataframe(df_project_managers, hide_index=True)
-    else:
-        st.info("Руководители проекта пока не добавлены.")
-
-def display_role_permissions_management():
-    st.title("Назначение полномочий ролям")
-    roles = db.get_all_roles()
-    menu_items = [
-        'Главная страница',
-        'Ведение пользователей',
-        'Ведение ролей',
-        'Назначение ролей',
-        'Назначение полномочий',
-        'Ведение организаций',
-        'Ведение исполнителей',
-        'Ведение руководителей проекта',
-        'Ведение должностей',
-        'Ведение договоров',
-        'Выход'
-    ]
-    role_options = {role[1]: role[0] for role in roles}
-    selected_role_name = st.selectbox("Выберите роль", list(role_options.keys()))
-    selected_role_id = role_options[selected_role_name]
-    current_permissions = db.get_role_permissions(selected_role_id)
-    st.write("Отметьте пункты меню, которые будут доступны для этой роли:")
-    new_permissions = {}
-    for item in menu_items:
-        new_permissions[item] = st.checkbox(item, value=current_permissions.get(item, 0) == 1)
-    if st.button("Сохранить полномочия"):
-        db.set_role_permissions(selected_role_id, new_permissions)
-        st.success("Полномочия успешно сохранены!")
-        st.rerun()
-
-def display_position_management():
-    st.title("Ведение должностей")
-    with st.expander("Добавить новую должность"):
-        with st.form("add_position_form"):
-            new_position_name = st.text_input("Название должности")
-            add_position_submit = st.form_submit_button("Добавить должность")
-            if add_position_submit:
-                if new_position_name:
-                    if db.add_position(new_position_name):
-                        st.success(f"Должность '{new_position_name}' успешно добавлена!")
-                        st.rerun()
-                    else:
-                        st.error(f"Должность с названием '{new_position_name}' уже существует.")
-                else:
-                    st.error("Название должности не может быть пустым.")
-    positions = db.get_all_positions()
-    st.subheader("Список должностей")
-    for pos in positions:
-        col1, col2 = st.columns([3,1])
-        with col1:
-            st.write(pos[1])
-        with col2:
-            if st.button(f"Удалить", key=f"del_pos_{pos[0]}"):
-                db.delete_position(pos[0])
-                st.success("Должность удалена!")
-                st.rerun()
-
-def display_contract_management():
-    st.title("Ведение договоров")
-    with st.expander("Добавить новый договор"):
-        with st.form("add_contract_form"):
-            new_contract_number = st.text_input("Номер договора")
-            new_contract_date = st.date_input("Дата договора")
-            add_contract_submit = st.form_submit_button("Добавить договор")
-            if add_contract_submit:
-                if new_contract_number and new_contract_date:
-                    db.add_contract(new_contract_number, new_contract_date.strftime('%Y-%m-%d'))
-                    st.success(f"Договор '{new_contract_number}' успешно добавлен!")
-                    st.rerun()
-                else:
-                    st.error("Номер и дата договора не могут быть пустыми.")
-    contracts = db.get_all_contracts()
-    st.subheader("Список договоров")
-    for contract in contracts:
-        col1, col2 = st.columns([3,1])
-        with col1:
-            st.write(f"{contract[1]} от {contract[2]}")
-        with col2:
-            if st.button(f"Удалить", key=f"del_contract_{contract[0]}"):
-                db.delete_contract(contract[0])
-                st.success("Договор удалён!")
-                st.rerun()
-
-if __name__ == "__main__":
-    if st.session_state.menu_choice == "Ведение должностей":
-        display_position_management()
-    elif st.session_state.menu_choice == "Ведение договоров":
-        display_contract_management()
-    else:
-        display_home_page() 

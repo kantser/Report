@@ -49,10 +49,16 @@ def init_db():
                   middle_name TEXT)''')
     
     # Создание таблицы отчетов
-    # Проверяем, существует ли старая таблица reports с колонкой report_content или отсутствует contract_id
     c.execute("PRAGMA table_info(reports)")
     columns = [col[1] for col in c.fetchall()]
-    if "report_content" in columns or "contract_id" not in columns:
+    
+    # Проверяем, существует ли старая таблица reports или отсутствуют необходимые колонки
+    required_columns = ["organization_id", "start_date", "end_date", "executor_id", "project_manager_id", "contract_id", "report_filename", 
+                        "num_licenses", "control_list_json", "num_incidents_section1", "num_blocked_resources", 
+                        "num_unidentified_carriers", "num_info_messages", "num_controlled_docs", "num_time_violations"]
+    
+    # Проверяем наличие всех требуемых колонок
+    if not all(col in columns for col in required_columns):
         c.execute("DROP TABLE IF EXISTS reports")
         conn.commit()
         st.warning("База данных отчетов была сброшена из-за изменения структуры. Старые отчеты удалены.")
@@ -66,6 +72,14 @@ def init_db():
                   project_manager_id INTEGER NOT NULL,
                   contract_id INTEGER NOT NULL,
                   report_filename TEXT,
+                  num_licenses INTEGER,
+                  control_list_json TEXT,
+                  num_incidents_section1 INTEGER,
+                  num_blocked_resources INTEGER,
+                  num_unidentified_carriers INTEGER,
+                  num_info_messages INTEGER,
+                  num_controlled_docs INTEGER,
+                  num_time_violations INTEGER,
                   FOREIGN KEY (organization_id) REFERENCES organizations (id),
                   FOREIGN KEY (executor_id) REFERENCES executors (id),
                   FOREIGN KEY (project_manager_id) REFERENCES project_managers (id),
@@ -369,12 +383,23 @@ def add_report(organization_id, start_date, end_date, executor_id, project_manag
               (organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id))
     conn.commit()
     conn.close()
-    return True
+
+def add_full_report(organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
+                     num_licenses, control_list_json, num_incidents_section1, num_blocked_resources,
+                     num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO reports (organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id, num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              (organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
+               num_licenses, control_list_json, num_incidents_section1, num_blocked_resources,
+               num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations))
+    conn.commit()
+    conn.close()
 
 def get_report(report_id):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("SELECT id, organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id FROM reports WHERE id = ?", (report_id,))
+    c.execute("SELECT id, organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id, num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations FROM reports WHERE id = ?", (report_id,))
     report = c.fetchone()
     conn.close()
     return report
@@ -382,7 +407,7 @@ def get_report(report_id):
 def get_all_reports():
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("SELECT r.id, o.name, r.start_date, r.end_date, e.first_name, e.last_name, e.middle_name, pm.first_name, pm.last_name, pm.middle_name, r.report_filename FROM reports r LEFT JOIN organizations o ON r.organization_id = o.id LEFT JOIN executors e ON r.executor_id = e.id LEFT JOIN project_managers pm ON r.project_manager_id = pm.id")
+    c.execute("SELECT id, organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id, num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations FROM reports")
     reports = c.fetchall()
     conn.close()
     return reports
