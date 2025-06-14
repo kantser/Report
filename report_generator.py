@@ -21,11 +21,29 @@ def create_overlay(org_name, start_date, end_date, executor_full_name, pm_full_n
     # Регистрируем шрифт (один раз за сессию)
     pdfmetrics.registerFont(TTFont('DejaVu', font_path))
 
-    c.setFont("DejaVu", 16)
-    c.drawCentredString(297, 680, "Отчет по результатам мониторинга информационной безопасности")
     c.setFont("DejaVu", 12)
-    c.drawCentredString(297, 650, org_name)
-    c.drawCentredString(297, 630, f"За период с {start_date} по {end_date} года")
+    
+    # Добавляем текст "Конфиденциально" и "Экз№___" в правый верхний угол
+    # Рассчитываем X-координату для выравнивания по правому краю
+    page_width = A4[0]
+    right_margin = 60 # Отступ от правого края
+
+    text_conf = "Конфиденциально"
+    text_conf_width = c.stringWidth(text_conf, "DejaVu", 12)
+    x_pos_conf = page_width - right_margin - text_conf_width
+    c.drawString(x_pos_conf, 640, text_conf)
+
+    text_exz = "Экз№ ____"
+    text_exz_width = c.stringWidth(text_exz, "DejaVu", 12)
+    x_pos_exz = page_width - right_margin - text_exz_width
+    c.drawString(x_pos_exz, 610, text_exz)
+
+    # Корректируем расположение основного текста на первой странице
+    c.setFont("DejaVu", 12)
+    c.drawCentredString(297, 400, "Отчет по результатам мониторинга информационной безопасности") # Сдвинуто ниже
+    c.setFont("DejaVu", 12)
+    c.drawCentredString(297, 370, org_name) # Сдвинуто ниже
+    c.drawCentredString(297, 340, f"За период с {start_date} по {end_date} года") # Сдвинуто ниже
     c.setFont("DejaVu", 12)
     c.drawString(60, 120, f"Исполнил: {executor_full_name}")
     c.drawString(60, 100, f"Руководитель проекта: {pm_full_name}")
