@@ -631,16 +631,19 @@ def display_executor_management():
             new_exec_first_name = st.text_input("Имя исполнителя")
             new_exec_last_name = st.text_input("Фамилия исполнителя")
             new_exec_middle_name = st.text_input("Отчество исполнителя (необязательно)")
-            new_exec_position = st.selectbox("Должность", list(pos_options.keys())) if pos_options else None
+            new_exec_position = st.selectbox("Должность", list(pos_options.keys()) if pos_options else ["Должности отсутствуют"], disabled=not bool(pos_options))
             add_exec_submit = st.form_submit_button("Добавить исполнителя")
 
             if add_exec_submit:
-                if new_exec_first_name and new_exec_last_name and new_exec_position:
-                    db.add_executor(new_exec_first_name, new_exec_last_name, new_exec_middle_name, pos_options[new_exec_position])
-                    st.success(f"Исполнитель {new_exec_first_name} {new_exec_last_name} успешно добавлен!")
-                    st.rerun()
+                if new_exec_first_name and new_exec_last_name:
+                    if pos_options: # Check if there are actual positions to select from
+                        db.add_executor(new_exec_first_name, new_exec_last_name, new_exec_middle_name, pos_options[new_exec_position])
+                        st.success(f"Исполнитель {new_exec_first_name} {new_exec_last_name} успешно добавлен!")
+                        st.rerun()
+                    else:
+                        st.error("Для добавления исполнителя необходимо сначала добавить хотя бы одну должность.")
                 else:
-                    st.error("Имя, фамилия и должность исполнителя не могут быть пустыми.")
+                    st.error("Имя и фамилия исполнителя не могут быть пустыми.")
 
     executors = db.get_all_executors()
     if executors:
@@ -653,20 +656,35 @@ def display_executor_management():
                     edit_exec_first_name = st.text_input("Имя", value=selected_exec[1])
                     edit_exec_last_name = st.text_input("Фамилия", value=selected_exec[2])
                     edit_exec_middle_name = st.text_input("Отчество", value=selected_exec[3] if selected_exec[3] else "")
-                    edit_exec_position = st.selectbox("Должность", list(pos_options.keys()),
-                        index=list(pos_options.values()).index(selected_exec[4]) if selected_exec[4] in pos_options.values() else 0) if pos_options else None
+                    # Ensure position selectbox is always visible even if no positions exist
+                    edit_exec_position_options = list(pos_options.keys()) if pos_options else ["Должности отсутствуют"]
+                    edit_exec_position_index = 0
+                    if selected_exec[4] in pos_options.values():
+                        edit_exec_position_index = list(pos_options.values()).index(selected_exec[4])
+                    elif pos_options: # If there are positions but the selected one is not found, default to first
+                        edit_exec_position_index = 0
+
+                    edit_exec_position = st.selectbox("Должность",
+                        options=edit_exec_position_options,
+                        index=edit_exec_position_index,
+                        disabled=not bool(pos_options))
+
                     col1, col2 = st.columns(2)
                     with col1:
                         update_exec_submit = st.form_submit_button("Обновить исполнителя")
                     with col2:
                         delete_exec_submit = st.form_submit_button("Удалить исполнителя")
                     if update_exec_submit:
-                        if edit_exec_first_name and edit_exec_last_name and edit_exec_position:
-                            db.update_executor(selected_exec_id, edit_exec_first_name, edit_exec_last_name, edit_exec_middle_name, pos_options[edit_exec_position])
-                            st.success("Исполнитель успешно обновлен!")
-                            st.rerun()
+                        if edit_exec_first_name and edit_exec_last_name:
+                            if pos_options: # Check if there are actual positions to select from
+                                db.update_executor(selected_exec_id, edit_exec_first_name, edit_exec_last_name, edit_exec_middle_name, pos_options[edit_exec_position])
+                                st.success("Исполнитель успешно обновлен!")
+                                st.rerun()
+                            else:
+                                st.error("Для обновления исполнителя необходимо сначала добавить хотя бы одну должность.")
                         else:
-                            st.error("Имя, фамилия и должность исполнителя не могут быть пустыми.")
+                            st.error("Имя и фамилия исполнителя не могут быть пустыми.")
+                    
                     if delete_exec_submit:
                         db.delete_executor(selected_exec_id)
                         st.success("Исполнитель успешно удален!")
@@ -700,8 +718,219 @@ def display_project_manager_management():
 
             if add_pm_submit:
                 if new_pm_first_name and new_pm_last_name:
-                    db.add_project_manager(new_pm_first_name, new_pm_last_name, new_pm_middle_name)
-                    st.success(f"Руководитель проекта {new_pm_first_name} {new_pm_last_name} успешно добавлен!")
-                    st.rerun()
+                    if db.add_project_manager(new_pm_first_name, new_pm_last_name, new_pm_middle_name):
+                        st.success(f"Руководитель проекта {new_pm_first_name} {new_pm_last_name} успешно добавлен!")
+                        st.rerun()
+                    else:
+                        st.error(f"Руководитель проекта с ФИО {new_pm_first_name} {new_pm_last_name} {new_pm_middle_name if new_pm_middle_name else ''} уже существует.")
                 else:
                     st.error("Имя и фамилия руководителя проекта не могут быть пустыми.")
+
+    project_managers = db.get_all_project_managers()
+    if project_managers:
+        with st.expander("Редактировать или удалить руководителя проекта"):
+            with st.form("edit_delete_pm_form"):
+                pm_ids = [pm[0] for pm in project_managers]
+                selected_pm_id = st.selectbox("Выберите руководителя проекта по ID", pm_ids)
+                selected_pm = next((pm for pm in project_managers if pm[0] == selected_pm_id), None)
+                if selected_pm:
+                    edit_pm_first_name = st.text_input("Имя", value=selected_pm[1])
+                    edit_pm_last_name = st.text_input("Фамилия", value=selected_pm[2])
+                    edit_pm_middle_name = st.text_input("Отчество", value=selected_pm[3] if selected_pm[3] else "")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        update_pm_submit = st.form_submit_button("Обновить руководителя проекта")
+                    with col2:
+                        delete_pm_submit = st.form_submit_button("Удалить руководителя проекта")
+
+                    if update_pm_submit:
+                        if edit_pm_first_name and edit_pm_last_name:
+                            if db.update_project_manager(selected_pm_id, edit_pm_first_name, edit_pm_last_name, edit_pm_middle_name):
+                                st.success("Руководитель проекта успешно обновлен!")
+                                st.rerun()
+                            else:
+                                st.error(f"Руководитель проекта с ФИО {edit_pm_first_name} {edit_pm_last_name} {edit_pm_middle_name if edit_pm_middle_name else ''} уже существует.")
+                        else:
+                            st.error("Имя и фамилия руководителя проекта не могут быть пустыми.")
+                    
+                    if delete_pm_submit:
+                        db.delete_project_manager(selected_pm_id)
+                        st.success("Руководитель проекта успешно удален!")
+                        st.rerun()
+    else:
+        st.info("Пока нет руководителей проекта для редактирования или удаления.")
+
+    st.subheader("Существующие руководители проекта")
+    if project_managers:
+        df_project_managers = pd.DataFrame(project_managers, columns=["ID", "Имя", "Фамилия", "Отчество"])
+        st.dataframe(df_project_managers, hide_index=True)
+    else:
+        st.info("Руководители проекта пока не добавлены.")
+
+def display_role_permissions_management():
+    st.title("Назначение полномочий для ролей")
+
+    roles = db.get_all_roles()
+    if not roles:
+        st.info("Роли не найдены. Пожалуйста, сначала добавьте роли.")
+        return
+
+    role_names = [role[1] for role in roles]
+    selected_role_name = st.selectbox("Выберите роль", role_names)
+    selected_role_id = [role[0] for role in roles if role[1] == selected_role_name][0]
+
+    st.subheader(f"Настройка полномочий для роли: {selected_role_name}")
+
+    # Получаем текущие полномочия для выбранной роли
+    current_permissions = db.get_role_permissions(selected_role_id)
+    current_permissions_dict = {key: bool(value) for key, value in current_permissions.items()}
+
+    # Определяем все возможные пункты меню
+    all_menu_items = [
+        'Главная страница',
+        'Ведение пользователей',
+        'Ведение ролей',
+        'Назначение ролей',
+        'Назначение полномочий',
+        'Ведение организаций',
+        'Ведение исполнителей',
+        'Ведение руководителей проекта',
+        'Ведение должностей',
+        'Ведение договоров',
+        'Выход'
+    ]
+
+    new_permissions = {}
+    for item in all_menu_items:
+        default_value = current_permissions_dict.get(item, False)
+        new_permissions[item] = st.checkbox(f"Разрешить доступ к: {item}", value=default_value)
+
+    if st.button("Сохранить полномочия"):
+        # Преобразуем булевы значения в 0 или 1
+        permissions_to_save = {item: (1 if allowed else 0) for item, allowed in new_permissions.items()}
+        db.set_role_permissions(selected_role_id, permissions_to_save)
+        st.success("Полномочия успешно обновлены!")
+        st.rerun()
+
+def display_position_management():
+    st.title("Ведение должностей")
+
+    with st.expander("Добавить новую должность"):
+        with st.form("add_position_form"):
+            new_position_name = st.text_input("Название должности")
+            add_position_submit = st.form_submit_button("Добавить должность")
+
+            if add_position_submit:
+                if new_position_name:
+                    if db.add_position(new_position_name):
+                        st.success(f"Должность '{new_position_name}' успешно добавлена!")
+                        st.rerun()
+                    else:
+                        st.error(f"Должность с названием '{new_position_name}' уже существует.")
+                else:
+                    st.error("Название должности не может быть пустым.")
+
+    positions = db.get_all_positions()
+    if positions:
+        with st.expander("Редактировать или удалить должность"):
+            with st.form("edit_delete_position_form"):
+                pos_options = {pos[1]: pos[0] for pos in positions}
+                selected_pos_name = st.selectbox("Выберите должность", list(pos_options.keys()))
+                selected_pos_id = pos_options.get(selected_pos_name)
+
+                if selected_pos_id:
+                    current_pos_name = next((pos[1] for pos in positions if pos[0] == selected_pos_id), None)
+                    edit_pos_name = st.text_input("Название должности", value=current_pos_name)
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        update_pos_submit = st.form_submit_button("Обновить должность")
+                    with col2:
+                        delete_pos_submit = st.form_submit_button("Удалить должность")
+
+                    if update_pos_submit:
+                        if edit_pos_name:
+                            if db.update_position(selected_pos_id, edit_pos_name):
+                                st.success("Должность успешно обновлена!")
+                                st.rerun()
+                            else:
+                                st.error(f"Должность с названием '{edit_pos_name}' уже существует.")
+                        else:
+                            st.error("Название должности не может быть пустым.")
+                    
+                    if delete_pos_submit:
+                        db.delete_position(selected_pos_id)
+                        st.success("Должность успешно удалена!")
+                        st.rerun()
+    else:
+        st.info("Пока нет должностей для редактирования или удаления.")
+
+    st.subheader("Существующие должности")
+    if positions:
+        df_positions = pd.DataFrame(positions, columns=["ID", "Название должности"])
+        st.dataframe(df_positions, hide_index=True)
+    else:
+        st.info("Должности пока не добавлены.")
+
+def display_contract_management():
+    st.title("Ведение договоров")
+
+    with st.expander("Добавить новый договор"):
+        with st.form("add_contract_form"):
+            new_contract_number = st.text_input("Номер договора")
+            new_contract_date = st.date_input("Дата договора", value=None)
+            add_contract_submit = st.form_submit_button("Добавить договор")
+
+            if add_contract_submit:
+                if new_contract_number and new_contract_date:
+                    # Format date to string for database storage
+                    new_contract_date_str = new_contract_date.strftime("%Y-%m-%d")
+                    db.add_contract(new_contract_number, new_contract_date_str)
+                    st.success(f"Договор №{new_contract_number} от {new_contract_date} успешно добавлен!")
+                    st.rerun()
+                else:
+                    st.error("Номер и дата договора не могут быть пустыми.")
+
+    contracts = db.get_all_contracts()
+    if contracts:
+        with st.expander("Редактировать или удалить договор"):
+            with st.form("edit_delete_contract_form"):
+                contract_ids = [contract[0] for contract in contracts]
+                selected_contract_id = st.selectbox("Выберите договор по ID", contract_ids)
+                selected_contract = next((c for c in contracts if c[0] == selected_contract_id), None)
+
+                if selected_contract:
+                    edit_contract_number = st.text_input("Номер договора", value=selected_contract[1])
+                    # Convert string date from DB to date object for st.date_input
+                    edit_contract_date = pd.to_datetime(selected_contract[2]).date()
+                    edited_date_input = st.date_input("Дата договора", value=edit_contract_date)
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        update_contract_submit = st.form_submit_button("Обновить договор")
+                    with col2:
+                        delete_contract_submit = st.form_submit_button("Удалить договор")
+
+                    if update_contract_submit:
+                        if edit_contract_number and edited_date_input:
+                            edited_date_input_str = edited_date_input.strftime("%Y-%m-%d")
+                            db.update_contract(selected_contract_id, edit_contract_number, edited_date_input_str)
+                            st.success("Договор успешно обновлен!")
+                            st.rerun()
+                        else:
+                            st.error("Номер и дата договора не могут быть пустыми.")
+                    
+                    if delete_contract_submit:
+                        db.delete_contract(selected_contract_id)
+                        st.success("Договор успешно удален!")
+                        st.rerun()
+    else:
+        st.info("Пока нет договоров для редактирования или удаления.")
+
+    st.subheader("Существующие договоры")
+    if contracts:
+        df_contracts = pd.DataFrame(contracts, columns=["ID", "Номер договора", "Дата договора"])
+        st.dataframe(df_contracts, hide_index=True)
+    else:
+        st.info("Договоры пока не добавлены.")

@@ -147,6 +147,14 @@ def init_db():
     for item in menu_items:
         c.execute("INSERT OR IGNORE INTO role_permissions (role_id, menu_item, allowed) VALUES (?, ?, 1)", (admin_role_id, item))
     
+    # Получаем id роли 'Пользователь'
+    c.execute("SELECT id FROM roles WHERE name = 'Пользователь'")
+    user_role_id = c.fetchone()[0]
+
+    # Для пользователя запретить все по умолчанию
+    for item in menu_items:
+        c.execute("INSERT OR IGNORE INTO role_permissions (role_id, menu_item, allowed) VALUES (?, ?, 0)", (user_role_id, item))
+    
     conn.commit()
     conn.close()
 
@@ -352,8 +360,26 @@ def get_all_project_managers():
 def add_project_manager(first_name, last_name, middle_name):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
+
+    # Normalize empty string to None for consistent storage and lookup
+    normalized_middle_name = middle_name if middle_name else None
+
+    # Check for existing record
+    if normalized_middle_name is None:
+        c.execute("SELECT id FROM project_managers WHERE first_name = ? AND last_name = ? AND middle_name IS NULL",
+                  (first_name, last_name))
+    else:
+        c.execute("SELECT id FROM project_managers WHERE first_name = ? AND last_name = ? AND middle_name = ?",
+                  (first_name, last_name, normalized_middle_name))
+
+    existing_pm = c.fetchone()
+    if existing_pm:
+        conn.close()
+        return False # Руководитель проекта с таким ФИО уже существует
+
+    # Insert the new project manager
     c.execute("INSERT INTO project_managers (first_name, last_name, middle_name) VALUES (?, ?, ?)",
-              (first_name, last_name, middle_name))
+              (first_name, last_name, normalized_middle_name))
     conn.commit()
     conn.close()
     return True
@@ -361,8 +387,26 @@ def add_project_manager(first_name, last_name, middle_name):
 def update_project_manager(manager_id, first_name, last_name, middle_name):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
+
+    # Normalize empty string to None for consistent storage
+    normalized_middle_name = middle_name if middle_name else None
+
+    # Before updating, check for duplicates with other records
+    # Exclude the current record being updated from the duplicate check
+    if normalized_middle_name is None:
+        c.execute("SELECT id FROM project_managers WHERE first_name = ? AND last_name = ? AND middle_name IS NULL AND id != ?",
+                  (first_name, last_name, manager_id))
+    else:
+        c.execute("SELECT id FROM project_managers WHERE first_name = ? AND last_name = ? AND middle_name = ? AND id != ?",
+                  (first_name, last_name, normalized_middle_name, manager_id))
+
+    existing_duplicate_pm = c.fetchone()
+    if existing_duplicate_pm:
+        conn.close()
+        return False # Руководитель проекта с таким ФИО уже существует у другой записи
+
     c.execute("UPDATE project_managers SET first_name = ?, last_name = ?, middle_name = ? WHERE id = ?",
-              (first_name, last_name, middle_name, manager_id))
+              (first_name, last_name, normalized_middle_name, manager_id))
     conn.commit()
     conn.close()
     return True
