@@ -45,6 +45,8 @@ def main():
             ui.display_position_management()
         elif st.session_state.menu_choice == "Ведение договоров":
             ui.display_contract_management()
+        elif st.session_state.menu_choice == "Ведение угроз":
+            ui.display_threats_management()
 
 if __name__ == "__main__":
     main()

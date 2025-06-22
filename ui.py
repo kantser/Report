@@ -49,6 +49,7 @@ def display_sidebar():
         'Ведение руководителей проекта',
         'Ведение должностей',
         'Ведение договоров',
+        'Ведение угроз',
         'Выход'
     ]
 
@@ -79,7 +80,7 @@ def display_sidebar():
                     st.session_state.menu_choice = item
 
     # --- Ведение справочников ---
-    reference_items = ['Ведение организаций', 'Ведение исполнителей', 'Ведение руководителей проекта', 'Ведение должностей', 'Ведение договоров']
+    reference_items = ['Ведение организаций', 'Ведение исполнителей', 'Ведение руководителей проекта', 'Ведение должностей', 'Ведение договоров', 'Ведение угроз']
     has_reference_management = any(item in allowed_menu_items for item in reference_items)
     if has_reference_management:
         st.sidebar.markdown(
@@ -206,10 +207,14 @@ def display_home_page():
                     row['№ п/п'] = idx
 
                 # Теперь вызываем generate_full_pdf_from_data для загрузки полного отчета
+                # Новые поля для раздела II
+                incidents_section2 = report_data[16] if len(report_data) > 16 else ""
+                selected_threat_direction = report_data[17] if len(report_data) > 17 else "-"
                 pdf_output = rg.generate_full_pdf_from_data(
                     org_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
                     num_licenses, control_list_data, num_incidents_section1, num_blocked_resources,
-                    num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations
+                    num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
+                    incidents_section2
                 )
 
                 col1, col2 = st.columns(2, gap="small")
@@ -242,6 +247,10 @@ def display_report_form():
         st.session_state.control_list_df = pd.DataFrame(
             columns=['№ п/п', 'Должность', 'ФИО', 'Наименование ПЭВМ в ИС Заказчика', 'Период контроля']
         )
+    # Сброс инцидентов при каждом переходе в раздел
+    prev_page = st.session_state.get('current_page')
+    if prev_page != 'report_form':
+        st.session_state['incidents_section2'] = []
     st.session_state.current_page = 'report_form' # Track current page
     st.title("Формирование отчета")
     st.markdown("<h3 style='margin-bottom: 1em;'>Формирование главной страницы</h3>", unsafe_allow_html=True)
@@ -332,6 +341,38 @@ def display_report_form():
     st.markdown("<h5 style='margin-top: 0.5em; margin-bottom: 0.2em;'>— Выявлено лиц с нарушением регламента рабочего времени</h5>", unsafe_allow_html=True)
     num_time_violations = st.number_input("", min_value=0, value=0, key="num_time_violations", label_visibility="collapsed")
 
+    st.markdown("<h4 style='margin-top: 2em; margin-bottom: 0.5em;'>Раздел II. Результаты объективного контроля</h4>", unsafe_allow_html=True)
+    st.markdown("<b>Выявленные инциденты:</b>", unsafe_allow_html=True)
+
+    # --- Динамические инциденты ---
+    threat_list = db.get_all_threats()
+    threat_names = [t[1] for t in threat_list]
+    if not threat_names:
+        threat_names = ["Нет данных"]
+    if 'incidents_section2' not in st.session_state or not isinstance(st.session_state['incidents_section2'], list):
+        st.session_state['incidents_section2'] = []
+
+    if st.button("Добавить инцидент"):
+        st.session_state['incidents_section2'].append({
+            'threat_direction': threat_names[0] if threat_names and threat_names[0] != "Нет данных" else "",
+            'description': ""
+        })
+
+    for idx, incident in enumerate(st.session_state['incidents_section2']):
+        st.markdown(f"<b>Инцидент №{idx+1}</b>", unsafe_allow_html=True)
+        st.session_state['incidents_section2'][idx]['threat_direction'] = st.selectbox(
+            f"Направленность выявленной угрозы (Инцидент №{idx+1}):",
+            threat_names,
+            key=f"threat_direction_{idx}",
+            index=threat_names.index(incident.get('threat_direction', threat_names[0])) if incident.get('threat_direction', threat_names[0]) in threat_names else 0,
+            disabled=(threat_names == ["Нет данных"])
+        )
+        st.session_state['incidents_section2'][idx]['description'] = st.text_area(
+            f"Описание инцидента (Инцидент №{idx+1}):",
+            value=incident.get('description', ""),
+            key=f"incident_desc_{idx}"
+        )
+
     # Перемещенная и обновленная кнопка "Сформировать отчет" теперь в самом низу формы
     if st.button("Сформировать отчет"):
         if selected_org_id and selected_exec_id and selected_pm_id and selected_contract_id:
@@ -366,7 +407,8 @@ def display_report_form():
                 selected_exec_id, selected_pm_id, report_filename, selected_contract_id,
                 num_licenses, processed_control_list_df.to_json(orient='records'), num_incidents_section1,
                 num_blocked_resources, num_unidentified_carriers, num_info_messages,
-                num_controlled_docs, num_time_violations
+                num_controlled_docs, num_time_violations,
+                st.session_state['incidents_section2']
             )
             control_list_data_for_pdf = processed_control_list_df.to_dict(orient='records')
             # print(f"DEBUG: control_list_data sent to PDF generator: {control_list_data_for_pdf}")
@@ -375,9 +417,11 @@ def display_report_form():
                 selected_exec_id, selected_pm_id, report_filename, selected_contract_id,
                 num_licenses, control_list_data_for_pdf, num_incidents_section1,
                 num_blocked_resources, num_unidentified_carriers, num_info_messages,
-                num_controlled_docs, num_time_violations
+                num_controlled_docs, num_time_violations,
+                st.session_state['incidents_section2']
             )
             st.success("Отчет успешно сформирован и сохранен!")
+            st.session_state['incidents_section2'] = []
             st.download_button(
                 label="Скачать отчет в PDF",
                 data=pdf_output,
@@ -798,6 +842,7 @@ def display_role_permissions_management():
         'Ведение руководителей проекта',
         'Ведение должностей',
         'Ведение договоров',
+        'Ведение угроз',
         'Выход'
     ]
 
@@ -934,3 +979,55 @@ def display_contract_management():
         st.dataframe(df_contracts, hide_index=True)
     else:
         st.info("Договоры пока не добавлены.")
+
+def display_threats_management():
+    st.title("Ведение угроз")
+
+    with st.expander("Добавить новую угрозу"):
+        with st.form("add_threat_form"):
+            new_threat_name = st.text_input("Название угрозы")
+            add_threat_submit = st.form_submit_button("Добавить угрозу")
+            if add_threat_submit:
+                if new_threat_name:
+                    if db.add_threat(new_threat_name):
+                        st.success(f"Угроза '{new_threat_name}' успешно добавлена!")
+                        st.rerun()
+                    else:
+                        st.error(f"Угроза с названием '{new_threat_name}' уже существует.")
+                else:
+                    st.error("Название угрозы не может быть пустым.")
+
+    threats = db.get_all_threats()
+    if threats:
+        with st.expander("Редактировать или удалить угрозу"):
+            with st.form("edit_delete_threat_form"):
+                threat_options = {th[1]: th[0] for th in threats}
+                selected_threat_name = st.selectbox("Выберите угрозу", list(threat_options.keys()))
+                selected_threat_id = threat_options.get(selected_threat_name)
+                if selected_threat_id:
+                    edit_threat_name = st.text_input("Название угрозы", value=selected_threat_name)
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        update_threat_submit = st.form_submit_button("Обновить угрозу")
+                    with col2:
+                        delete_threat_submit = st.form_submit_button("Удалить угрозу")
+                    if update_threat_submit:
+                        if edit_threat_name:
+                            db.update_threat(selected_threat_id, edit_threat_name)
+                            st.success("Угроза успешно обновлена!")
+                            st.rerun()
+                        else:
+                            st.error("Название угрозы не может быть пустым.")
+                    if delete_threat_submit:
+                        db.delete_threat(selected_threat_id)
+                        st.success("Угроза успешно удалена!")
+                        st.rerun()
+    else:
+        st.info("Пока нет угроз для редактирования или удаления.")
+
+    st.subheader("Существующие угрозы")
+    if threats:
+        df_threats = pd.DataFrame(threats, columns=["ID", "Название угрозы"])
+        st.dataframe(df_threats, hide_index=True)
+    else:
+        st.info("Угрозы пока не добавлены.")

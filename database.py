@@ -1,6 +1,7 @@
 import sqlite3
 import bcrypt
 import streamlit as st
+import json
 
 def init_db():
     conn = sqlite3.connect('report.db')
@@ -80,6 +81,8 @@ def init_db():
                   num_info_messages INTEGER,
                   num_controlled_docs INTEGER,
                   num_time_violations INTEGER,
+                  incidents_section2 TEXT,
+                  selected_threat_direction TEXT,
                   FOREIGN KEY (organization_id) REFERENCES organizations (id),
                   FOREIGN KEY (executor_id) REFERENCES executors (id),
                   FOREIGN KEY (project_manager_id) REFERENCES project_managers (id),
@@ -105,11 +108,25 @@ def init_db():
                   number TEXT NOT NULL,
                   date TEXT NOT NULL)''')
     
+    # Создание таблицы угроз
+    c.execute('''CREATE TABLE IF NOT EXISTS threats (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL
+    )''')
+    
     # Миграция: добавление поля position_id в executors
     c.execute("PRAGMA table_info(executors)")
     columns = [col[1] for col in c.fetchall()]
     if "position_id" not in columns:
         c.execute("ALTER TABLE executors ADD COLUMN position_id INTEGER REFERENCES positions(id)")
+    
+    # Миграция: добавление новых полей для раздела II
+    c.execute("PRAGMA table_info(reports)")
+    columns = [col[1] for col in c.fetchall()]
+    if "incidents_section2" not in columns:
+        c.execute("ALTER TABLE reports ADD COLUMN incidents_section2 TEXT")
+    if "selected_threat_direction" not in columns:
+        c.execute("ALTER TABLE reports ADD COLUMN selected_threat_direction TEXT")
     
     # Добавление ролей по умолчанию
     c.execute("INSERT OR IGNORE INTO roles (name) VALUES ('Администратор'), ('Пользователь')")
@@ -141,6 +158,7 @@ def init_db():
         'Ведение руководителей проекта',
         'Ведение должностей',
         'Ведение договоров',
+        'Ведение угроз',
         'Выход'
     ]
     # Для администратора разрешить все
@@ -430,20 +448,36 @@ def add_report(organization_id, start_date, end_date, executor_id, project_manag
 
 def add_full_report(organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
                      num_licenses, control_list_json, num_incidents_section1, num_blocked_resources,
-                     num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations):
+                     num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
+                     incidents_section2):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("INSERT INTO reports (organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id, num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              (organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
-               num_licenses, control_list_json, num_incidents_section1, num_blocked_resources,
-               num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations))
+    c.execute("""
+        INSERT INTO reports (
+            organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
+            num_licenses, control_list_json, num_incidents_section1, num_blocked_resources,
+            num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
+            incidents_section2
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
+        num_licenses, control_list_json, num_incidents_section1, num_blocked_resources,
+        num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
+        json.dumps(incidents_section2) if not isinstance(incidents_section2, str) else incidents_section2
+    ))
     conn.commit()
     conn.close()
 
 def get_report(report_id):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("SELECT id, organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id, num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations FROM reports WHERE id = ?", (report_id,))
+    c.execute("""
+        SELECT id, organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
+               num_licenses, control_list_json, num_incidents_section1, num_blocked_resources,
+               num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
+               incidents_section2, selected_threat_direction
+        FROM reports WHERE id = ?
+    """, (report_id,))
     report = c.fetchone()
     conn.close()
     return report
@@ -451,30 +485,19 @@ def get_report(report_id):
 def get_all_reports():
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("""SELECT
-        r.id,
-        o.name,
-        r.start_date,
-        r.end_date,
-        e.first_name,
-        e.last_name,
-        e.middle_name,
-        pm.first_name,
-        pm.last_name,
-        pm.middle_name,
-        r.report_filename,
-        r.num_licenses,
-        r.control_list_json,
-        r.num_incidents_section1,
-        r.num_blocked_resources,
-        r.num_unidentified_carriers,
-        r.num_info_messages,
-        r.num_controlled_docs,
-        r.num_time_violations
-    FROM reports r
-    JOIN organizations o ON r.organization_id = o.id
-    JOIN executors e ON r.executor_id = e.id
-    JOIN project_managers pm ON r.project_manager_id = pm.id""")
+    c.execute("""
+        SELECT reports.id, organizations.name, reports.start_date, reports.end_date,
+               executors.first_name, executors.last_name, executors.middle_name,
+               project_managers.first_name, project_managers.last_name, project_managers.middle_name,
+               reports.report_filename, reports.num_licenses, reports.control_list_json, reports.num_incidents_section1,
+               reports.num_blocked_resources, reports.num_unidentified_carriers, reports.num_info_messages,
+               reports.num_controlled_docs, reports.num_time_violations,
+               reports.incidents_section2, reports.selected_threat_direction
+        FROM reports
+        LEFT JOIN organizations ON reports.organization_id = organizations.id
+        LEFT JOIN executors ON reports.executor_id = executors.id
+        LEFT JOIN project_managers ON reports.project_manager_id = project_managers.id
+    """)
     reports = c.fetchall()
     conn.close()
     return reports
@@ -634,4 +657,40 @@ def get_contract_by_id(contract_id):
     c.execute("SELECT number, date FROM contracts WHERE id = ?", (contract_id,))
     contract = c.fetchone()
     conn.close()
-    return contract if contract else None 
+    return contract if contract else None
+
+def get_all_threats():
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("SELECT id, name FROM threats")
+    threats = c.fetchall()
+    conn.close()
+    return threats
+
+def add_threat(name):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO threats (name) VALUES (?)", (name,))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def update_threat(threat_id, name):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("UPDATE threats SET name = ? WHERE id = ?", (name, threat_id))
+    conn.commit()
+    conn.close()
+    return True
+
+def delete_threat(threat_id):
+    conn = sqlite3.connect('report.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM threats WHERE id = ?", (threat_id,))
+    conn.commit()
+    conn.close()
+    return True 

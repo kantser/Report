@@ -96,6 +96,40 @@ def create_section1_overlay(executor_position, executor_full_name_no_position, c
     buffer.seek(0)
     return buffer
 
+def create_section2_overlay(incidents_section2):
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    font_path = os.path.join(CURRENT_DIR, 'fonts', 'DejaVuSansCondensed.ttf')
+    pdfmetrics.registerFont(TTFont('DejaVu', font_path))
+
+    c.setFont("DejaVu", 16)
+    c.drawCentredString(297, 780, "Раздел II. Результаты объективного контроля")
+    y_position = 740
+    c.setFont("DejaVu", 12)
+    c.drawString(60, y_position, "Выявленные инциденты:")
+    y_position -= 20
+    if not incidents_section2 or len(incidents_section2) == 0:
+        c.drawString(60, y_position, "Инциденты не добавлены.")
+    else:
+        for idx, incident in enumerate(incidents_section2):
+            c.drawString(60, y_position, f"Инцидент №{idx+1}")
+            y_position -= 20
+            c.drawString(80, y_position, "Направленность выявленной угрозы:")
+            c.drawString(300, y_position, incident.get('threat_direction', '-') or '-')
+            y_position -= 16
+            text = incident.get('description', '-') or '-'
+            for line in text.splitlines() or [""]:
+                c.drawString(100, y_position, line)
+                y_position -= 14
+            y_position -= 12
+            if y_position < 100:
+                c.showPage()
+                y_position = 780
+                c.setFont("DejaVu", 12)
+    c.save()
+    buffer.seek(0)
+    return buffer
+
 def _draw_table_headers(c, table_x, table_y, col_widths, header_row_height, headers):
     """
     Рисует заголовки таблицы.
@@ -337,7 +371,8 @@ def create_statistical_section_overlay(num_licenses, control_list_data, num_inci
 
 def generate_full_pdf_from_data(org_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
                                  num_licenses, control_list_data, num_incidents_section1, num_blocked_resources,
-                                 num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations):
+                                 num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
+                                 incidents_section2, *args):
     org_name = db.get_organization_by_id(org_id)
     executor_full_name_for_main_page = db.get_executor_by_id(executor_id, include_position=False)
     executor_position_for_section1 = db.get_executor_position_by_id(executor_id)
@@ -380,13 +415,20 @@ def generate_full_pdf_from_data(org_id, start_date, end_date, executor_id, proje
 
     # Перебираем все страницы, сгенерированные в оверлее статистического раздела
     for i in range(len(statistical_section_overlay_pdf.pages)):
-        # Важно: Создаем новый PdfReader для шаблона в каждой итерации, 
-        # чтобы получить свежую, неизмененную страницу шаблона для каждого слияния.
         statistical_template_pdf_reader_fresh = PdfReader(statistical_template_path)
         statistical_template_page = statistical_template_pdf_reader_fresh.pages[0] 
         statistical_overlay_page = statistical_section_overlay_pdf.pages[i]
         statistical_template_page.merge_page(statistical_overlay_page)
         writer.add_page(statistical_template_page)
+
+    # Раздел II (инциденты)
+    section2_overlay_buffer = create_section2_overlay(incidents_section2)
+    section2_overlay_pdf = PdfReader(section2_overlay_buffer)
+    section2_template_pdf = PdfReader(section1_template_path)
+    section2_template_page = section2_template_pdf.pages[0]
+    section2_overlay_page = section2_overlay_pdf.pages[0]
+    section2_template_page.merge_page(section2_overlay_page)
+    writer.add_page(section2_template_page)
 
     # Создаем буфер для записи PDF
     output_buffer = BytesIO()
