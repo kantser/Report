@@ -3,6 +3,7 @@ import pandas as pd
 import database as db
 import report_generator as rg
 import json
+import base64
 
 def display_login_form():
     st.title("Вход в систему")
@@ -208,7 +209,14 @@ def display_home_page():
 
                 # Теперь вызываем generate_full_pdf_from_data для загрузки полного отчета
                 # Новые поля для раздела II
-                incidents_section2 = report_data[16] if len(report_data) > 16 else ""
+                incidents_section2 = report_data[16] if len(report_data) > 16 else "[]"
+                if isinstance(incidents_section2, str):
+                    try:
+                        incidents_section2 = json.loads(incidents_section2)
+                        if not isinstance(incidents_section2, list):
+                            incidents_section2 = []
+                    except Exception:
+                        incidents_section2 = []
                 selected_threat_direction = report_data[17] if len(report_data) > 17 else "-"
                 pdf_output = rg.generate_full_pdf_from_data(
                     org_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
@@ -372,6 +380,13 @@ def display_report_form():
             value=incident.get('description', ""),
             key=f"incident_desc_{idx}"
         )
+        uploaded_files = st.file_uploader(
+            f"Скриншоты для инцидента №{idx+1} (можно выбрать несколько)",
+            type=["png", "jpg", "jpeg", "bmp"],
+            accept_multiple_files=True,
+            key=f"screenshots_{idx}"
+        )
+        st.session_state['incidents_section2'][idx]['screenshots'] = uploaded_files
 
     # Перемещенная и обновленная кнопка "Сформировать отчет" теперь в самом низу формы
     if st.button("Сформировать отчет"):
@@ -402,13 +417,14 @@ def display_report_form():
             report_filename = f"Отчет_{selected_org_name}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}_full.pdf"
             
             # Сохранение всех данных, включая новые поля и таблицу
+            serializable_incidents = serialize_incidents_for_db(st.session_state['incidents_section2'])
             db.add_full_report(
                 selected_org_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), 
                 selected_exec_id, selected_pm_id, report_filename, selected_contract_id,
                 num_licenses, processed_control_list_df.to_json(orient='records'), num_incidents_section1,
                 num_blocked_resources, num_unidentified_carriers, num_info_messages,
                 num_controlled_docs, num_time_violations,
-                st.session_state['incidents_section2']
+                serializable_incidents
             )
             control_list_data_for_pdf = processed_control_list_df.to_dict(orient='records')
             # print(f"DEBUG: control_list_data sent to PDF generator: {control_list_data_for_pdf}")
@@ -418,7 +434,7 @@ def display_report_form():
                 num_licenses, control_list_data_for_pdf, num_incidents_section1,
                 num_blocked_resources, num_unidentified_carriers, num_info_messages,
                 num_controlled_docs, num_time_violations,
-                st.session_state['incidents_section2']
+                serializable_incidents
             )
             st.success("Отчет успешно сформирован и сохранен!")
             st.session_state['incidents_section2'] = []
@@ -430,6 +446,19 @@ def display_report_form():
             )
         else:
             st.error("Пожалуйста, заполните все обязательные поля для формирования отчета.")
+
+def serialize_incidents_for_db(incidents):
+    result = []
+    for inc in incidents:
+        inc_copy = inc.copy()
+        inc_copy['screenshots'] = []
+        for file in inc.get('screenshots', []):
+            if hasattr(file, 'read'):
+                file.seek(0)
+                data = file.read()
+                inc_copy['screenshots'].append(base64.b64encode(data).decode('utf-8'))
+        result.append(inc_copy)
+    return result
 
 def display_user_management():
     st.title("Ведение пользователей")

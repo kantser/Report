@@ -7,6 +7,8 @@ from io import BytesIO
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import re # Импортируем модуль re для регулярных выражений
+from reportlab.lib.utils import ImageReader
+import base64
 
 # Определяем текущую директорию
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -121,6 +123,27 @@ def create_section2_overlay(incidents_section2):
             for line in text.splitlines() or [""]:
                 c.drawString(100, y_position, line)
                 y_position -= 14
+            # Вставка скриншотов после текста
+            screenshots = incident.get('screenshots', [])
+            for file in screenshots:
+                try:
+                    # file — это base64-строка
+                    img_bytes = base64.b64decode(file)
+                    img = ImageReader(BytesIO(img_bytes))
+                    img_width, img_height = img.getSize()
+                    max_width = 400
+                    max_height = 250
+                    scale = min(max_width / img_width, max_height / img_height, 1)
+                    draw_width = img_width * scale
+                    draw_height = img_height * scale
+                    if y_position - draw_height < 60:
+                        c.showPage()
+                        y_position = 780
+                        c.setFont("DejaVu", 12)
+                    c.drawImage(img, 100, y_position - draw_height, width=draw_width, height=draw_height)
+                    y_position -= draw_height + 12
+                except Exception as e:
+                    continue
             y_position -= 12
             if y_position < 100:
                 c.showPage()
