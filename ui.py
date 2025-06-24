@@ -10,15 +10,31 @@ def display_login_form():
     st.markdown(
         """
         <style>
-        .custom-login-title {
-            font-size: 2.2rem;
-            font-weight: 700;
-            white-space: nowrap;
-            margin-bottom: 1.2em;
+        .custom-login-title-main {
+            font-size: clamp(2rem, 6vw, 3.2rem);
+            font-weight: 800;
+            margin-bottom: 0.2em;
             margin-top: 0.5em;
+            max-width: 100vw;
+            overflow: hidden;
+            display: block;
+            text-align: center;
+            line-height: 1.1;
+        }
+        .custom-login-title-sub {
+            font-size: clamp(1.1rem, 3vw, 1.7rem);
+            font-weight: 700;
+            margin-bottom: 1.2em;
+            margin-top: 0.1em;
+            max-width: 100vw;
+            overflow: hidden;
+            display: block;
+            text-align: center;
+            line-height: 1.1;
         }
         </style>
-        <h1 class='custom-login-title'>Вход в&nbsp;систему&nbsp;RV&nbsp;GROUP&nbsp;reporting</h1>
+        <h1 class='custom-login-title-main'>RV GROUP отчетность</h1>
+        <div class='custom-login-title-sub'>Вход в систему</div>
         """,
         unsafe_allow_html=True
     )
