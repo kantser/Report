@@ -7,12 +7,25 @@ import base64
 import datetime
 
 def display_login_form():
-    st.title("Вход в систему")
+    st.markdown(
+        """
+        <style>
+        .custom-login-title {
+            font-size: 2.2rem;
+            font-weight: 700;
+            white-space: nowrap;
+            margin-bottom: 1.2em;
+            margin-top: 0.5em;
+        }
+        </style>
+        <h1 class='custom-login-title'>Вход в&nbsp;систему&nbsp;RV&nbsp;GROUP&nbsp;reporting</h1>
+        """,
+        unsafe_allow_html=True
+    )
     with st.form("login_form"):
         username = st.text_input("Логин")
         password = st.text_input("Пароль", type="password")
         submit = st.form_submit_button("Войти")
-        
         if submit:
             user = db.login(username, password)
             if user:
