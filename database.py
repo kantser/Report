@@ -56,11 +56,35 @@ def init_db():
     # Проверяем, существует ли старая таблица reports или отсутствуют необходимые колонки
     required_columns = ["organization_id", "start_date", "end_date", "executor_id", "project_manager_id", "contract_id", "report_filename", 
                         "num_licenses", "control_list_json", "num_incidents_section1", "num_blocked_resources", 
-                        "num_unidentified_carriers", "num_info_messages", "num_controlled_docs", "num_time_violations"]
+                        "num_unidentified_carriers", "num_info_messages", "num_controlled_docs", "num_time_violations",
+                        "incidents_section2_json", "external_control_object", "fio_external", "external_disks_list"]
     
     # Проверяем наличие всех требуемых колонок
     if not all(col in columns for col in required_columns):
         c.execute("DROP TABLE IF EXISTS reports")
+        conn.commit()
+        c.execute('''CREATE TABLE IF NOT EXISTS reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization_id INTEGER,
+            start_date TEXT,
+            end_date TEXT,
+            executor_id INTEGER,
+            project_manager_id INTEGER,
+            report_filename TEXT,
+            contract_id INTEGER,
+            num_licenses INTEGER,
+            control_list_json TEXT,
+            num_incidents_section1 INTEGER,
+            num_blocked_resources INTEGER,
+            num_unidentified_carriers INTEGER,
+            num_info_messages INTEGER,
+            num_controlled_docs INTEGER,
+            num_time_violations INTEGER,
+            incidents_section2_json TEXT,
+            external_control_object TEXT,
+            fio_external TEXT,
+            external_disks_list TEXT
+        )''')
         conn.commit()
         st.warning("База данных отчетов была сброшена из-за изменения структуры. Старые отчеты удалены.")
 
@@ -81,8 +105,13 @@ def init_db():
                   num_info_messages INTEGER,
                   num_controlled_docs INTEGER,
                   num_time_violations INTEGER,
+                  incidents_section2_json TEXT,
+                  external_control_object TEXT,
+                  fio_external TEXT,
+                  external_disks_list TEXT,
                   incidents_section2 TEXT,
                   selected_threat_direction TEXT,
+                  external_disks_table_json TEXT,
                   FOREIGN KEY (organization_id) REFERENCES organizations (id),
                   FOREIGN KEY (executor_id) REFERENCES executors (id),
                   FOREIGN KEY (project_manager_id) REFERENCES project_managers (id),
@@ -127,6 +156,11 @@ def init_db():
         c.execute("ALTER TABLE reports ADD COLUMN incidents_section2 TEXT")
     if "selected_threat_direction" not in columns:
         c.execute("ALTER TABLE reports ADD COLUMN selected_threat_direction TEXT")
+    # Миграция: добавление поля external_disks_table_json для раздела III
+    c.execute("PRAGMA table_info(reports)")
+    columns = [col[1] for col in c.fetchall()]
+    if "external_disks_table_json" not in columns:
+        c.execute("ALTER TABLE reports ADD COLUMN external_disks_table_json TEXT")
     
     # Добавление ролей по умолчанию
     c.execute("INSERT OR IGNORE INTO roles (name) VALUES ('Администратор'), ('Пользователь')")
@@ -447,37 +481,26 @@ def add_report(organization_id, start_date, end_date, executor_id, project_manag
     conn.close()
 
 def add_full_report(organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
-                     num_licenses, control_list_json, num_incidents_section1, num_blocked_resources,
-                     num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
-                     incidents_section2):
+                   num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
+                   num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json, fio_external, external_disks_table_json):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("""
-        INSERT INTO reports (
-            organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
-            num_licenses, control_list_json, num_incidents_section1, num_blocked_resources,
-            num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
-            incidents_section2
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
+    c.execute('''INSERT INTO reports (
         organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
-        num_licenses, control_list_json, num_incidents_section1, num_blocked_resources,
-        num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
-        json.dumps(incidents_section2) if not isinstance(incidents_section2, str) else incidents_section2
-    ))
+        num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
+        num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json, fio_external, external_disks_table_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        (organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
+         num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
+         num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json, fio_external, external_disks_table_json)
+    )
     conn.commit()
     conn.close()
 
 def get_report(report_id):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
-    c.execute("""
-        SELECT id, organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
-               num_licenses, control_list_json, num_incidents_section1, num_blocked_resources,
-               num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
-               incidents_section2, selected_threat_direction
-        FROM reports WHERE id = ?
-    """, (report_id,))
+    c.execute('SELECT * FROM reports WHERE id = ?', (report_id,))
     report = c.fetchone()
     conn.close()
     return report

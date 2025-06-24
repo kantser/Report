@@ -153,6 +153,92 @@ def create_section2_overlay(incidents_section2):
     buffer.seek(0)
     return buffer
 
+def create_section3_overlay(control_objects):
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    font_path = os.path.join(CURRENT_DIR, 'fonts', 'DejaVuSansCondensed.ttf')
+    pdfmetrics.registerFont(TTFont('DejaVu', font_path))
+    c.setFont("DejaVu", 16)
+    c.drawCentredString(297, 780, "Раздел III. Подключение внешних магнитных носителей информации")
+    y_position = 740
+    for idx, obj in enumerate(control_objects):
+        if y_position < 200:
+            c.showPage()
+            y_position = 780
+            c.setFont("DejaVu", 16)
+            c.drawCentredString(297, 780, "Раздел III. Подключение внешних магнитных носителей информации")
+            y_position = 740
+        c.setFont("DejaVu", 12)
+        c.drawString(60, y_position, f"Объект контроля:")
+        y_position -= 20
+        fio_external = obj.get('fio_external', '')
+        fio_line = f"Список подключений внешних дисков сотрудника: {fio_external if fio_external else ''}"
+        c.drawString(60, y_position, fio_line)
+        y_position -= 20
+        external_disks_table = obj.get('external_disks_table', [])
+        # --- Таблица ---
+        if external_disks_table and isinstance(external_disks_table, list) and len(external_disks_table) > 0:
+            table_x = 60
+            table_y = y_position
+            col_widths = [80, 70, 70, 90, 210]
+            header_row_height = 40
+            headers = ["Дата/Время", "Тип события", "Компьютер", "Пользователь", "Событие"]
+            Y_THRESHOLD_FOR_ROWS = 60
+            _draw_table_headers(c, table_x, table_y, col_widths, header_row_height, headers)
+            data_y = table_y - header_row_height
+            c.setFont("DejaVu", 10)
+            for i, row_data in enumerate(external_disks_table):
+                current_row_max_text_height = 0
+                wrapped_cells = []
+                for col_idx, key in enumerate(headers):
+                    val = row_data.get(key, "")
+                    if val is None:
+                        val = ""
+                    if key == "Событие":
+                        lines = []
+                        for part in str(val).splitlines():
+                            lns, _ = _get_wrapped_text_lines(c, part, "DejaVu", 10, col_widths[col_idx])
+                            lines.extend(lns)
+                        height = len(lines) * 12
+                    else:
+                        lines, height = _get_wrapped_text_lines(c, val, "DejaVu", 10, col_widths[col_idx])
+                    wrapped_cells.append(lines)
+                    current_row_max_text_height = max(current_row_max_text_height, height)
+                min_cell_height = 30
+                vertical_padding_for_cell = 14
+                max_row_height = max(min_cell_height, current_row_max_text_height + vertical_padding_for_cell)
+                if data_y - max_row_height < Y_THRESHOLD_FOR_ROWS:
+                    c.showPage()
+                    data_y = A4[1] - 60
+                    _draw_table_headers(c, table_x, data_y, col_widths, header_row_height, headers)
+                    data_y -= header_row_height
+                current_x = table_x
+                for col_idx, lines in enumerate(wrapped_cells):
+                    font_size = 10
+                    line_height = 12
+                    total_text_height = len(lines) * line_height
+                    y_cell_center = data_y - (max_row_height / 2)
+                    text_y_start = y_cell_center + (total_text_height / 2) - line_height - 2
+                    for line_text in lines:
+                        text_width = c.stringWidth(line_text, "DejaVu", font_size)
+                        x_offset = (col_widths[col_idx] - text_width) / 2
+                        c.drawString(current_x + x_offset, text_y_start, line_text)
+                        text_y_start -= line_height
+                    current_x += col_widths[col_idx]
+                c.rect(table_x, data_y - max_row_height, sum(col_widths), max_row_height)
+                current_x = table_x
+                for j in range(len(col_widths)):
+                    if j > 0:
+                        c.line(current_x, data_y - max_row_height, current_x, data_y)
+                    current_x += col_widths[j]
+                data_y -= max_row_height
+            y_position = data_y - 30
+        else:
+            y_position -= 30
+    c.save()
+    buffer.seek(0)
+    return buffer
+
 def _draw_table_headers(c, table_x, table_y, col_widths, header_row_height, headers):
     """
     Рисует заголовки таблицы.
@@ -187,7 +273,7 @@ def _get_wrapped_text_lines(canvas, text, font_name, font_size, max_width):
     if not text:
         return [''], 0
 
-    text_str = str(text)
+    text_str = str(text).replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
     canvas.setFont(font_name, font_size)
 
     lines = []
@@ -395,7 +481,7 @@ def create_statistical_section_overlay(num_licenses, control_list_data, num_inci
 def generate_full_pdf_from_data(org_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
                                  num_licenses, control_list_data, num_incidents_section1, num_blocked_resources,
                                  num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
-                                 incidents_section2, *args):
+                                 incidents_section2, control_objects=None, *args):
     org_name = db.get_organization_by_id(org_id)
     executor_full_name_for_main_page = db.get_executor_by_id(executor_id, include_position=False)
     executor_position_for_section1 = db.get_executor_position_by_id(executor_id)
@@ -452,6 +538,29 @@ def generate_full_pdf_from_data(org_id, start_date, end_date, executor_id, proje
     section2_overlay_page = section2_overlay_pdf.pages[0]
     section2_template_page.merge_page(section2_overlay_page)
     writer.add_page(section2_template_page)
+
+    # --- Раздел III (объекты контроля) ---
+    if control_objects and len(control_objects) > 0:
+        # Генерируем страницы для каждого объекта контроля
+        section3_overlay_buffer = create_section3_overlay(control_objects)
+        section3_overlay_pdf = PdfReader(section3_overlay_buffer)
+        section3_template_pdf = PdfReader(section1_template_path)
+        section3_template_page = section3_template_pdf.pages[0]
+        section3_overlay_page = section3_overlay_pdf.pages[0]
+        section3_template_page.merge_page(section3_overlay_page)
+        writer.add_page(section3_template_page)
+    else:
+        # Для обратной совместимости - если переданы старые параметры
+        if len(args) >= 2:
+            fio_external = args[0]
+            external_disks_table = args[1]
+            section3_overlay_buffer = create_section3_overlay([{'fio_external': fio_external, 'external_disks_table': external_disks_table}])
+            section3_overlay_pdf = PdfReader(section3_overlay_buffer)
+            section3_template_pdf = PdfReader(section1_template_path)
+            section3_template_page = section3_template_pdf.pages[0]
+            section3_overlay_page = section3_overlay_pdf.pages[0]
+            section3_template_page.merge_page(section3_overlay_page)
+            writer.add_page(section3_template_page)
 
     # Создаем буфер для записи PDF
     output_buffer = BytesIO()

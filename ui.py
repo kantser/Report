@@ -4,6 +4,7 @@ import database as db
 import report_generator as rg
 import json
 import base64
+import datetime
 
 def display_login_form():
     st.title("Вход в систему")
@@ -207,14 +208,11 @@ def display_home_page():
                 for idx, row in enumerate(control_list_data, 1):
                     row['№ п/п'] = idx
 
-                # Теперь вызываем generate_full_pdf_from_data для загрузки полного отчета
-                # Новые поля для раздела II
+                # Перед генерацией PDF убедимся, что incidents_section2 — список, а не строка
                 incidents_section2 = report_data[16] if len(report_data) > 16 else "[]"
                 if isinstance(incidents_section2, str):
                     try:
                         incidents_section2 = json.loads(incidents_section2)
-                        if not isinstance(incidents_section2, list):
-                            incidents_section2 = []
                     except Exception:
                         incidents_section2 = []
                 selected_threat_direction = report_data[17] if len(report_data) > 17 else "-"
@@ -388,8 +386,101 @@ def display_report_form():
         )
         st.session_state['incidents_section2'][idx]['screenshots'] = uploaded_files
 
-    # Перемещенная и обновленная кнопка "Сформировать отчет" теперь в самом низу формы
-    if st.button("Сформировать отчет"):
+    # --- КОНЕЦ раздела II ---
+
+    # --- НОВЫЙ РАЗДЕЛ III ---
+    st.markdown("<h4 style='margin-top: 2em; margin-bottom: 0.5em;'>Раздел III. Подключение внешних магнитных носителей информации</h4>", unsafe_allow_html=True)
+    st.markdown("<b>Объекты контроля:</b>", unsafe_allow_html=True)
+
+    # --- Динамические объекты контроля ---
+    if 'external_control_objects' not in st.session_state or not isinstance(st.session_state['external_control_objects'], list):
+        st.session_state['external_control_objects'] = []
+
+    if st.button("Добавить объект контроля"):
+        st.session_state['external_control_objects'].append({
+            'fio_external': '',
+            'external_disks_table': pd.DataFrame(columns=["Дата/Время", "Тип события", "Компьютер", "Пользователь", "Событие"])
+        })
+
+    for idx, control_object in enumerate(st.session_state['external_control_objects']):
+        st.markdown(f"<b>Объект контроля №{idx+1}</b>", unsafe_allow_html=True)
+        
+        # ФИО сотрудника для текущего объекта контроля
+        st.session_state['external_control_objects'][idx]['fio_external'] = st.text_input(
+            f"ФИО сотрудника (Объект контроля №{idx+1}):",
+            value=control_object.get('fio_external', ''),
+            key=f"fio_external_{idx}"
+        )
+
+        # Таблица подключений внешних дисков для текущего объекта контроля
+        st.markdown(f"<b>Список подключений внешних дисков сотрудника:</b>", unsafe_allow_html=True)
+        
+        # Инициализация таблицы если её нет
+        if 'external_disks_table' not in control_object or not isinstance(control_object['external_disks_table'], pd.DataFrame):
+            st.session_state['external_control_objects'][idx]['external_disks_table'] = pd.DataFrame(
+                columns=["Дата/Время", "Тип события", "Компьютер", "Пользователь", "Событие"]
+            )
+
+        # Форма для добавления новой строки в таблицу
+        with st.form(f"add_external_disk_row_form_{idx}", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                new_date = st.date_input("Дата", value=datetime.date.today(), key=f"external_disk_date_{idx}")
+            with col2:
+                new_time = st.time_input("Время", value=datetime.datetime.now().time(), key=f"external_disk_time_{idx}")
+            new_type = st.text_input("Тип события", key=f"external_disk_type_{idx}")
+            new_pc = st.text_input("Компьютер", key=f"external_disk_pc_{idx}")
+            new_user = st.text_input("Пользователь", key=f"external_disk_user_{idx}")
+            new_event = st.text_area("Событие", key=f"external_disk_event_{idx}")
+            add_row = st.form_submit_button("Добавить запись")
+            if add_row and new_date and new_time:
+                dt_str = f"{new_time.strftime('%H:%M:%S')} {new_date.strftime('%d.%m.%Y')}"
+                new_row = {
+                    "Дата/Время": dt_str,
+                    "Тип события": new_type,
+                    "Компьютер": new_pc,
+                    "Пользователь": new_user,
+                    "Событие": new_event
+                }
+                st.session_state['external_control_objects'][idx]['external_disks_table'] = pd.concat([
+                    st.session_state['external_control_objects'][idx]['external_disks_table'],
+                    pd.DataFrame([new_row])
+                ], ignore_index=True)
+
+        # Удаляем строки, где 'Дата/Время' пустая или None
+        st.session_state['external_control_objects'][idx]['external_disks_table'] = st.session_state['external_control_objects'][idx]['external_disks_table'][
+            st.session_state['external_control_objects'][idx]['external_disks_table']['Дата/Время'].notnull() & 
+            (st.session_state['external_control_objects'][idx]['external_disks_table']['Дата/Время'] != '')
+        ]
+
+        # Отображение таблицы с возможностью редактирования
+        external_disks_df = st.data_editor(
+            st.session_state['external_control_objects'][idx]['external_disks_table'],
+            column_config={
+                "Дата/Время": st.column_config.TextColumn("Дата/Время", help="Дата и время события"),
+                "Тип события": st.column_config.TextColumn("Тип события"),
+                "Компьютер": st.column_config.TextColumn("Компьютер"),
+                "Пользователь": st.column_config.TextColumn("Пользователь"),
+                "Событие": st.column_config.TextColumn("Событие", help="Марка и устройство")
+            },
+            hide_index=True,
+            num_rows="dynamic",
+            use_container_width=True,
+            key=f"external_disks_editor_{idx}"
+        )
+        st.session_state['external_control_objects'][idx]['external_disks_table'] = external_disks_df.copy()
+
+        # Кнопка удаления объекта контроля
+        if st.button(f"Удалить объект контроля №{idx+1}", key=f"delete_control_object_{idx}"):
+            st.session_state['external_control_objects'].pop(idx)
+            st.rerun()
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+
+    # --- КОНЕЦ раздела III ---
+
+    # Перемещённая и обновлённая кнопка "Сформировать отчёт" теперь в самом низу формы
+    if st.button("Сформировать отчёт"):
         if selected_org_id and selected_exec_id and selected_pm_id and selected_contract_id:
             # Получаем актуальные данные из data_editor непосредственно перед формированием отчета
             # Streamlit автоматически обновляет st.session_state[key] при изменениях в виджете
@@ -418,28 +509,51 @@ def display_report_form():
             
             # Сохранение всех данных, включая новые поля и таблицу
             serializable_incidents = serialize_incidents_for_db(st.session_state['incidents_section2'])
+            
+            # Сериализация объектов контроля для БД
+            serializable_control_objects = serialize_control_objects_for_db(st.session_state['external_control_objects'])
+            
+            # Для обратной совместимости сохраняем первый объект контроля в старые поля
+            first_control_object = st.session_state['external_control_objects'][0] if st.session_state['external_control_objects'] else {'fio_external': '', 'external_disks_table': pd.DataFrame()}
+            
             db.add_full_report(
                 selected_org_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), 
                 selected_exec_id, selected_pm_id, report_filename, selected_contract_id,
                 num_licenses, processed_control_list_df.to_json(orient='records'), num_incidents_section1,
                 num_blocked_resources, num_unidentified_carriers, num_info_messages,
                 num_controlled_docs, num_time_violations,
-                serializable_incidents
+                json.dumps(serializable_incidents),
+                first_control_object.get('fio_external', ''),
+                first_control_object.get('external_disks_table', pd.DataFrame()).to_json(orient='records')
             )
             control_list_data_for_pdf = processed_control_list_df.to_dict(orient='records')
             # print(f"DEBUG: control_list_data sent to PDF generator: {control_list_data_for_pdf}")
+            # Перед генерацией PDF убедимся, что incidents_section2 — список, а не строка
+            incidents_section2 = serializable_incidents
+            if isinstance(incidents_section2, str):
+                try:
+                    incidents_section2 = json.loads(incidents_section2)
+                except Exception:
+                    incidents_section2 = []
+            
+            # Подготовка данных объектов контроля для PDF
+            control_objects_for_pdf = serializable_control_objects
+            
             pdf_output = rg.generate_full_pdf_from_data(
                 selected_org_id, start_date.strftime('%d.%m.%Y'), end_date.strftime('%d.%m.%Y'), 
                 selected_exec_id, selected_pm_id, report_filename, selected_contract_id,
                 num_licenses, control_list_data_for_pdf, num_incidents_section1,
                 num_blocked_resources, num_unidentified_carriers, num_info_messages,
                 num_controlled_docs, num_time_violations,
-                serializable_incidents
+                incidents_section2,
+                control_objects_for_pdf
             )
-            st.success("Отчет успешно сформирован и сохранен!")
+            # Сброс данных объектов контроля после формирования отчета
+            st.session_state['external_control_objects'] = []
+            st.success("Отчёт успешно сформирован и сохранён!")
             st.session_state['incidents_section2'] = []
             st.download_button(
-                label="Скачать отчет в PDF",
+                label="Скачать отчёт в PDF",
                 data=pdf_output,
                 file_name=report_filename,
                 mime="application/pdf"
@@ -458,6 +572,14 @@ def serialize_incidents_for_db(incidents):
                 data = file.read()
                 inc_copy['screenshots'].append(base64.b64encode(data).decode('utf-8'))
         result.append(inc_copy)
+    return result
+
+def serialize_control_objects_for_db(control_objects):
+    result = []
+    for obj in control_objects:
+        obj_copy = obj.copy()
+        obj_copy['external_disks_table'] = obj['external_disks_table'].to_dict(orient='records')
+        result.append(obj_copy)
     return result
 
 def display_user_management():
@@ -826,7 +948,7 @@ def display_project_manager_management():
                                 st.error(f"Руководитель проекта с ФИО {edit_pm_first_name} {edit_pm_last_name} {edit_pm_middle_name if edit_pm_middle_name else ''} уже существует.")
                         else:
                             st.error("Имя и фамилия руководителя проекта не могут быть пустыми.")
-                    
+
                     if delete_pm_submit:
                         db.delete_project_manager(selected_pm_id)
                         st.success("Руководитель проекта успешно удален!")
@@ -932,7 +1054,7 @@ def display_position_management():
                                 st.error(f"Должность с названием '{edit_pos_name}' уже существует.")
                         else:
                             st.error("Название должности не может быть пустым.")
-                    
+
                     if delete_pos_submit:
                         db.delete_position(selected_pos_id)
                         st.success("Должность успешно удалена!")
@@ -994,7 +1116,7 @@ def display_contract_management():
                             st.rerun()
                         else:
                             st.error("Номер и дата договора не могут быть пустыми.")
-                    
+
                     if delete_contract_submit:
                         db.delete_contract(selected_contract_id)
                         st.success("Договор успешно удален!")
@@ -1060,3 +1182,4 @@ def display_threats_management():
         st.dataframe(df_threats, hide_index=True)
     else:
         st.info("Угрозы пока не добавлены.")
+
