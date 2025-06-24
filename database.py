@@ -112,6 +112,7 @@ def init_db():
                   incidents_section2 TEXT,
                   selected_threat_direction TEXT,
                   external_disks_table_json TEXT,
+                  external_control_objects_json TEXT,
                   FOREIGN KEY (organization_id) REFERENCES organizations (id),
                   FOREIGN KEY (executor_id) REFERENCES executors (id),
                   FOREIGN KEY (project_manager_id) REFERENCES project_managers (id),
@@ -161,6 +162,12 @@ def init_db():
     columns = [col[1] for col in c.fetchall()]
     if "external_disks_table_json" not in columns:
         c.execute("ALTER TABLE reports ADD COLUMN external_disks_table_json TEXT")
+    
+    # Миграция: добавление поля external_control_objects_json для хранения всех объектов контроля
+    c.execute("PRAGMA table_info(reports)")
+    columns = [col[1] for col in c.fetchall()]
+    if "external_control_objects_json" not in columns:
+        c.execute("ALTER TABLE reports ADD COLUMN external_control_objects_json TEXT")
     
     # Добавление ролей по умолчанию
     c.execute("INSERT OR IGNORE INTO roles (name) VALUES ('Администратор'), ('Пользователь')")
@@ -480,30 +487,39 @@ def add_report(organization_id, start_date, end_date, executor_id, project_manag
     conn.commit()
     conn.close()
 
-def add_full_report(organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
-                   num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
-                   num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json, fio_external, external_disks_table_json):
+def add_full_report(
+    organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
+    num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
+    num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json, fio_external, external_disks_table_json, external_control_objects_json
+):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
     c.execute('''INSERT INTO reports (
-        organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
+        organization_id, start_date, end_date, executor_id, project_manager_id, contract_id, report_filename,
         num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
-        num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json, fio_external, external_disks_table_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-        (organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
-         num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
-         num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json, fio_external, external_disks_table_json)
+        num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json,
+        external_control_object, fio_external, external_disks_list,
+        incidents_section2, selected_threat_direction, external_disks_table_json, external_control_objects_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        (
+            organization_id, start_date, end_date, executor_id, project_manager_id, contract_id, report_filename,
+            num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
+            num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json,
+            None, fio_external, None,
+            None, None, external_disks_table_json, external_control_objects_json
+        )
     )
     conn.commit()
     conn.close()
 
 def get_report(report_id):
     conn = sqlite3.connect('report.db')
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute('SELECT * FROM reports WHERE id = ?', (report_id,))
     report = c.fetchone()
     conn.close()
-    return report
+    return dict(report) if report else None
 
 def get_all_reports():
     conn = sqlite3.connect('report.db')

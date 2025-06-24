@@ -213,23 +213,23 @@ def display_home_page():
             report_data = db.get_report(selected_report_id)
             if report_data:
                 # Извлекаем сырые данные для генерации PDF
-                org_id = report_data[1]
-                start_date = report_data[2]
-                end_date = report_data[3]
-                executor_id = report_data[4]
-                project_manager_id = report_data[5]
-                report_filename = report_data[6] # report_filename now at index 6
-                contract_id = report_data[7] # contract_id now at index 7
+                org_id = report_data['organization_id']
+                start_date = report_data['start_date']
+                end_date = report_data['end_date']
+                executor_id = report_data['executor_id']
+                project_manager_id = report_data['project_manager_id']
+                report_filename = report_data['report_filename']
+                contract_id = report_data['contract_id']
 
                 # Извлекаем все статистические данные для полной версии отчета
-                num_licenses = report_data[8]
-                control_list_json = report_data[9]
-                num_incidents_section1 = report_data[10]
-                num_blocked_resources = report_data[11]
-                num_unidentified_carriers = report_data[12]
-                num_info_messages = report_data[13]
-                num_controlled_docs = report_data[14]
-                num_time_violations = report_data[15]
+                num_licenses = report_data['num_licenses']
+                control_list_json = report_data['control_list_json']
+                num_incidents_section1 = report_data['num_incidents_section1']
+                num_blocked_resources = report_data['num_blocked_resources']
+                num_unidentified_carriers = report_data['num_unidentified_carriers']
+                num_info_messages = report_data['num_info_messages']
+                num_controlled_docs = report_data['num_controlled_docs']
+                num_time_violations = report_data['num_time_violations']
 
                 # Десериализуем JSON-строку обратно в список словарей
                 control_list_data = json.loads(control_list_json) if control_list_json else []
@@ -238,19 +238,54 @@ def display_home_page():
                     row['№ п/п'] = idx
 
                 # Перед генерацией PDF убедимся, что incidents_section2 — список, а не строка
-                incidents_section2 = report_data[16] if len(report_data) > 16 else "[]"
+                incidents_section2 = report_data.get('incidents_section2_json', "[]")
                 if isinstance(incidents_section2, str):
                     try:
                         incidents_section2 = json.loads(incidents_section2)
                     except Exception:
                         incidents_section2 = []
-                selected_threat_direction = report_data[17] if len(report_data) > 17 else "-"
+                selected_threat_direction = report_data.get('selected_threat_direction', "-")
+
+                # --- Раздел III: объекты контроля ---
+                control_objects_for_pdf = []
+                external_control_objects_json = report_data.get('external_control_objects_json')
+                if external_control_objects_json:
+                    try:
+                        control_objects_for_pdf = json.loads(external_control_objects_json)
+                    except Exception:
+                        control_objects_for_pdf = []
+                if not control_objects_for_pdf:
+                    fio_external = report_data.get('fio_external', '')
+                    external_disks_table_json = report_data.get('external_disks_table_json', '[]')
+                    try:
+                        external_disks_table = json.loads(external_disks_table_json)
+                    except Exception:
+                        external_disks_table = []
+                    control_objects_for_pdf = [{
+                        'fio_external': fio_external,
+                        'external_disks_table': external_disks_table
+                    }]
+
+                print('DEBUG: serializable_control_objects =', control_objects_for_pdf)
                 pdf_output = rg.generate_full_pdf_from_data(
                     org_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
                     num_licenses, control_list_data, num_incidents_section1, num_blocked_resources,
                     num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
-                    incidents_section2
+                    incidents_section2,
+                    control_objects_for_pdf
                 )
+                print('DEBUG: control_objects_for_pdf =', control_objects_for_pdf)
+
+                # Гарантируем, что external_disks_table — список
+                for obj in control_objects_for_pdf:
+                    table = obj.get('external_disks_table')
+                    if isinstance(table, str):
+                        try:
+                            obj['external_disks_table'] = json.loads(table)
+                        except Exception:
+                            obj['external_disks_table'] = []
+                    elif not isinstance(table, list):
+                        obj['external_disks_table'] = []
 
                 col1, col2 = st.columns(2, gap="small")
                 with col1:
@@ -475,6 +510,7 @@ def display_report_form():
                     st.session_state['external_control_objects'][idx]['external_disks_table'],
                     pd.DataFrame([new_row])
                 ], ignore_index=True)
+                print('DEBUG: st.session_state[external_control_objects] =', st.session_state['external_control_objects'])
 
         # Удаляем строки, где 'Дата/Время' пустая или None
         st.session_state['external_control_objects'][idx]['external_disks_table'] = st.session_state['external_control_objects'][idx]['external_disks_table'][
@@ -545,6 +581,7 @@ def display_report_form():
             # Для обратной совместимости сохраняем первый объект контроля в старые поля
             first_control_object = st.session_state['external_control_objects'][0] if st.session_state['external_control_objects'] else {'fio_external': '', 'external_disks_table': pd.DataFrame()}
             
+            print('DEBUG: serializable_control_objects =', serializable_control_objects)
             db.add_full_report(
                 selected_org_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), 
                 selected_exec_id, selected_pm_id, report_filename, selected_contract_id,
@@ -553,7 +590,8 @@ def display_report_form():
                 num_controlled_docs, num_time_violations,
                 json.dumps(serializable_incidents),
                 first_control_object.get('fio_external', ''),
-                first_control_object.get('external_disks_table', pd.DataFrame()).to_json(orient='records')
+                first_control_object.get('external_disks_table', pd.DataFrame()).to_json(orient='records'),
+                json.dumps(serializable_control_objects)
             )
             control_list_data_for_pdf = processed_control_list_df.to_dict(orient='records')
             # print(f"DEBUG: control_list_data sent to PDF generator: {control_list_data_for_pdf}")
@@ -568,6 +606,7 @@ def display_report_form():
             # Подготовка данных объектов контроля для PDF
             control_objects_for_pdf = serializable_control_objects
             
+            print('DEBUG: control_objects_for_pdf =', control_objects_for_pdf)
             pdf_output = rg.generate_full_pdf_from_data(
                 selected_org_id, start_date.strftime('%d.%m.%Y'), end_date.strftime('%d.%m.%Y'), 
                 selected_exec_id, selected_pm_id, report_filename, selected_contract_id,
@@ -607,7 +646,18 @@ def serialize_control_objects_for_db(control_objects):
     result = []
     for obj in control_objects:
         obj_copy = obj.copy()
-        obj_copy['external_disks_table'] = obj['external_disks_table'].to_dict(orient='records')
+        table = obj.get('external_disks_table')
+        if isinstance(table, pd.DataFrame):
+            obj_copy['external_disks_table'] = table.to_dict(orient='records')
+        elif isinstance(table, str):
+            try:
+                obj_copy['external_disks_table'] = json.loads(table)
+            except Exception:
+                obj_copy['external_disks_table'] = []
+        elif isinstance(table, list):
+            obj_copy['external_disks_table'] = table
+        else:
+            obj_copy['external_disks_table'] = []
         result.append(obj_copy)
     return result
 
@@ -714,8 +764,6 @@ def display_role_management():
                             db.delete_role(selected_role_id_to_delete)
                             st.success(f"Роль '{selected_role_name_to_delete}' успешно удалена!")
                             st.rerun()
-                        else:
-                            st.error("Пожалуйста, выберите роль для удаления.")
     
     st.subheader("Существующие роли")
     if roles:
