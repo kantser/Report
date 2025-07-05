@@ -4,7 +4,7 @@ import database as db
 import report_generator as rg
 import json
 import base64
-import datetime
+import datetime as dt
 
 def display_login_form():
     st.markdown(
@@ -152,58 +152,25 @@ def display_home_page():
     if reports:
         processed_reports = []
         for r in reports:
-            # Debugging: print the raw 'r' tuple and its length
-            # print(f"DEBUG: Raw report data (r): {r}")
-            # print(f"DEBUG: Length of raw report data (len(r)): {len(r)}")
-
-            # Соответствие индексов в кортеже 'r' после JOIN-операций в db.get_all_reports():
-            # r[0]: reports.id
-            # r[1]: organizations.name
-            # r[2]: reports.start_date
-            # r[3]: reports.end_date
-            # r[4]: executors.first_name
-            # r[5]: executors.last_name
-            # r[6]: executors.middle_name
-            # r[7]: project_managers.first_name
-            # r[8]: project_managers.last_name
-            # r[9]: project_managers.middle_name
-            # r[10]: reports.report_filename
-            # r[11]: reports.num_licenses
-            # r[12]: reports.control_list_json
-            # r[13]: reports.num_incidents_section1
-            # r[14]: reports.num_blocked_resources
-            # r[15]: reports.num_unidentified_carriers
-            # r[16]: reports.num_info_messages
-            # r[17]: reports.num_controlled_docs
-            # r[18]: reports.num_time_violations
-
-            # Извлекаем данные напрямую из объединенного запроса
-            organization_name = r[1]
-            executor_first_name = r[4]
-            executor_last_name = r[5]
-            executor_middle_name = r[6]
-            project_manager_first_name = r[7]
-            project_manager_last_name = r[8]
-            project_manager_middle_name = r[9]
-
-            executor_fio = f"{executor_last_name} {executor_first_name} {executor_middle_name if executor_middle_name else ''}".strip()
-            project_manager_fio = f"{project_manager_last_name} {project_manager_first_name} {project_manager_middle_name if project_manager_middle_name else ''}".strip()
-            
-            # Debugging: print the constructed FIOs
-            # print(f"DEBUG: Executor FIO: {executor_fio}")
-            # print(f"DEBUG: Project Manager FIO: {project_manager_fio}")
-
+            print('DEBUG report row:', r)
+            # Индексы последних двух столбцов (создал, дата)
+            created_by_idx = len(r) - 2
+            created_at_idx = len(r) - 1
             processed_reports.append([
                 r[0], # ID
-                organization_name, # Организация
+                r[1], # Организация
                 r[2], # Начало периода
                 r[3], # Конец периода
-                executor_fio, # ФИО исполнителя
-                project_manager_fio, # ФИО руководителя проекта
-                r[10] # Имя файла отчета
+                f"{r[5]} {r[4]} {r[6] if r[6] else ''}".strip(), # ФИО исполнителя
+                f"{r[8]} {r[7]} {r[9] if r[9] else ''}".strip(), # ФИО руководителя проекта
+                r[10], # Имя файла
+                r[created_by_idx], # Создал
+                r[created_at_idx], # Дата и время создания
             ])
 
-        df_reports = pd.DataFrame(processed_reports, columns=["ID", "Организация", "Начало периода", "Конец периода", "ФИО исполнителя", "ФИО руководителя проекта", "Имя файла отчета"])
+        df_reports = pd.DataFrame(processed_reports, columns=[
+            "ID", "Организация", "Начало периода", "Конец периода", "ФИО исполнителя", "ФИО руководителя проекта", "Имя файла", "Создал", "Дата и время создания"
+        ])
         report_ids = df_reports["ID"].tolist()
         
         selected_report_id = st.selectbox("Выберите отчет для печати", report_ids, key="report_select")
@@ -624,7 +591,9 @@ def display_report_form():
                 first_control_object.get('fio_external', ''),
                 first_control_object.get('external_disks_table', pd.DataFrame()).to_json(orient='records'),
                 json.dumps(serializable_control_objects),
-                json.dumps(st.session_state.get('productivity_violations', []))
+                json.dumps(st.session_state.get('productivity_violations', [])),
+                str(st.session_state.get('current_user', '') or ''),
+                dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             )
             control_list_data_for_pdf = processed_control_list_df.to_dict(orient='records')
             # print(f"DEBUG: control_list_data sent to PDF generator: {control_list_data_for_pdf}")

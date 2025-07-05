@@ -114,6 +114,8 @@ def init_db():
                   external_disks_table_json TEXT,
                   external_control_objects_json TEXT,
                   productivity_violations_json TEXT,
+                  created_by TEXT,
+                  created_at TEXT,
                   FOREIGN KEY (organization_id) REFERENCES organizations (id),
                   FOREIGN KEY (executor_id) REFERENCES executors (id),
                   FOREIGN KEY (project_manager_id) REFERENCES project_managers (id),
@@ -175,6 +177,14 @@ def init_db():
     columns = [col[1] for col in c.fetchall()]
     if "productivity_violations_json" not in columns:
         c.execute("ALTER TABLE reports ADD COLUMN productivity_violations_json TEXT")
+    
+    # Миграция: добавление полей created_by и created_at для отчётов
+    c.execute("PRAGMA table_info(reports)")
+    columns = [col[1] for col in c.fetchall()]
+    if "created_by" not in columns:
+        c.execute("ALTER TABLE reports ADD COLUMN created_by TEXT")
+    if "created_at" not in columns:
+        c.execute("ALTER TABLE reports ADD COLUMN created_at TEXT")
     
     # Добавление ролей по умолчанию
     c.execute("INSERT OR IGNORE INTO roles (name) VALUES ('Администратор'), ('Пользователь')")
@@ -427,7 +437,7 @@ def add_project_manager(first_name, last_name, middle_name):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
 
-    # Normalize empty string to None for consistent storage and lookup
+    # Normalize empty string to None for consistent storage
     normalized_middle_name = middle_name if middle_name else None
 
     # Check for existing record
@@ -497,25 +507,25 @@ def add_report(organization_id, start_date, end_date, executor_id, project_manag
 def add_full_report(
     organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
     num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
-    num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json, fio_external, external_disks_table_json, external_control_objects_json, productivity_violations_json=None
+    num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json, fio_external, external_disks_table_json, external_control_objects_json, productivity_violations_json=None, created_by=None, created_at=None
 ):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
+    values = (
+        organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
+        num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
+        num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json,
+        None, fio_external, None,
+        None, None, external_disks_table_json, external_control_objects_json, productivity_violations_json, created_by, created_at
+    )
+    print('DEBUG add_full_report VALUES:', values)
     c.execute('''INSERT INTO reports (
-        organization_id, start_date, end_date, executor_id, project_manager_id, contract_id, report_filename,
+        organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
         num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
         num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json,
         external_control_object, fio_external, external_disks_list,
-        incidents_section2, selected_threat_direction, external_disks_table_json, external_control_objects_json, productivity_violations_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-        (
-            organization_id, start_date, end_date, executor_id, project_manager_id, contract_id, report_filename,
-            num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
-            num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json,
-            None, fio_external, None,
-            None, None, external_disks_table_json, external_control_objects_json, productivity_violations_json
-        )
-    )
+        incidents_section2, selected_threat_direction, external_disks_table_json, external_control_objects_json, productivity_violations_json, created_by, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', values)
     conn.commit()
     conn.close()
 
@@ -538,7 +548,8 @@ def get_all_reports():
                reports.report_filename, reports.num_licenses, reports.control_list_json, reports.num_incidents_section1,
                reports.num_blocked_resources, reports.num_unidentified_carriers, reports.num_info_messages,
                reports.num_controlled_docs, reports.num_time_violations,
-               reports.incidents_section2, reports.selected_threat_direction
+               reports.incidents_section2, reports.selected_threat_direction,
+               reports.created_by, reports.created_at
         FROM reports
         LEFT JOIN organizations ON reports.organization_id = organizations.id
         LEFT JOIN executors ON reports.executor_id = executors.id
