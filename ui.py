@@ -140,6 +140,10 @@ def display_sidebar():
                 st.session_state.current_user = None
                 st.rerun()
     st.sidebar.markdown("Разработано компанией NaviTech© 2025")
+    st.sidebar.markdown(
+        '<a href="mailto:support@navitechlabs.ru" style="color:#fff;text-decoration:underline;">Связаться с поддержкой</a>',
+        unsafe_allow_html=True
+    )
 
 def display_home_page():
     st.title("Главная страница")
