@@ -267,12 +267,21 @@ def display_home_page():
                     }]
 
                 print('DEBUG: serializable_control_objects =', control_objects_for_pdf)
+                # --- Раздел IV: продуктивность сотрудников ---
+                productivity_violations = []
+                productivity_violations_json = report_data.get('productivity_violations_json')
+                if productivity_violations_json:
+                    try:
+                        productivity_violations = json.loads(productivity_violations_json)
+                    except Exception:
+                        productivity_violations = []
                 pdf_output = rg.generate_full_pdf_from_data(
                     org_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
                     num_licenses, control_list_data, num_incidents_section1, num_blocked_resources,
                     num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
                     incidents_section2,
-                    control_objects_for_pdf
+                    control_objects_for_pdf,
+                    productivity_violations
                 )
                 print('DEBUG: control_objects_for_pdf =', control_objects_for_pdf)
 
@@ -321,6 +330,7 @@ def display_report_form():
     prev_page = st.session_state.get('current_page')
     if prev_page != 'report_form':
         st.session_state['incidents_section2'] = []
+        st.session_state['productivity_violations'] = []
     st.session_state.current_page = 'report_form' # Track current page
     st.title("Формирование отчета")
     st.markdown("<h3 style='margin-bottom: 1em;'>Формирование главной страницы</h3>", unsafe_allow_html=True)
@@ -544,6 +554,28 @@ def display_report_form():
 
     # --- КОНЕЦ раздела III ---
 
+    # --- НОВЫЙ РАЗДЕЛ IV ---
+    st.markdown("<h4 style='margin-top: 2em; margin-bottom: 0.5em;'>Раздел IV. Продуктивность работы сотрудников</h4>", unsafe_allow_html=True)
+    st.markdown("<b>Выявленные нарушения в расчете продуктивности рабочего дня:</b>", unsafe_allow_html=True)
+
+    if 'productivity_violations' not in st.session_state or not isinstance(st.session_state['productivity_violations'], list):
+        st.session_state['productivity_violations'] = []
+
+    if st.button("Добавить сотрудника"):
+        st.session_state['productivity_violations'].append({'employee': ''})
+
+    for idx, violation in enumerate(st.session_state['productivity_violations']):
+        st.session_state['productivity_violations'][idx]['employee'] = st.text_area(
+            f"Сотрудник/нарушение №{idx+1}",
+            value=violation.get('employee', ''),
+            key=f"productivity_employee_{idx}"
+        )
+        if st.button(f"Удалить сотрудника №{idx+1}", key=f"delete_productivity_{idx}"):
+            st.session_state['productivity_violations'].pop(idx)
+            st.rerun()
+
+    # --- КОНЕЦ раздела IV ---
+
     # Перемещённая и обновлённая кнопка "Сформировать отчёт" теперь в самом низу формы
     if st.button("Сформировать отчёт"):
         if selected_org_id and selected_exec_id and selected_pm_id and selected_contract_id:
@@ -591,7 +623,8 @@ def display_report_form():
                 json.dumps(serializable_incidents),
                 first_control_object.get('fio_external', ''),
                 first_control_object.get('external_disks_table', pd.DataFrame()).to_json(orient='records'),
-                json.dumps(serializable_control_objects)
+                json.dumps(serializable_control_objects),
+                json.dumps(st.session_state.get('productivity_violations', []))
             )
             control_list_data_for_pdf = processed_control_list_df.to_dict(orient='records')
             # print(f"DEBUG: control_list_data sent to PDF generator: {control_list_data_for_pdf}")
@@ -605,6 +638,11 @@ def display_report_form():
             
             # Подготовка данных объектов контроля для PDF
             control_objects_for_pdf = serializable_control_objects
+            if not control_objects_for_pdf:
+                control_objects_for_pdf = [{
+                    'fio_external': '',
+                    'external_disks_table': []
+                }]
             
             print('DEBUG: control_objects_for_pdf =', control_objects_for_pdf)
             pdf_output = rg.generate_full_pdf_from_data(
@@ -613,13 +651,14 @@ def display_report_form():
                 num_licenses, control_list_data_for_pdf, num_incidents_section1,
                 num_blocked_resources, num_unidentified_carriers, num_info_messages,
                 num_controlled_docs, num_time_violations,
-                incidents_section2,
-                control_objects_for_pdf
+                incidents_section2, control_objects_for_pdf,
+                st.session_state.get('productivity_violations', [])
             )
             # Сброс данных объектов контроля после формирования отчета
             st.session_state['external_control_objects'] = []
             st.success("Отчёт успешно сформирован и сохранён!")
             st.session_state['incidents_section2'] = []
+            st.session_state['productivity_violations'] = []
             st.download_button(
                 label="Скачать отчёт в PDF",
                 data=pdf_output,

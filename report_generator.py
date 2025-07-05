@@ -7,7 +7,7 @@ from io import BytesIO
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import re # Импортируем модуль re для регулярных выражений
-from reportlab.lib.utils import ImageReader
+from reportlab.lib.utils import ImageReader, simpleSplit
 import base64
 
 # Определяем текущую директорию
@@ -478,10 +478,46 @@ def create_statistical_section_overlay(num_licenses, control_list_data, num_inci
     buffer.seek(0)
     return buffer
 
+def create_section4_overlay(productivity_violations):
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    font_path = os.path.join(CURRENT_DIR, 'fonts', 'DejaVuSansCondensed.ttf')
+    pdfmetrics.registerFont(TTFont('DejaVu', font_path))
+    
+    c.setFont("DejaVu", 16)
+    c.drawCentredString(297, 780, "Раздел IV. Продуктивность работы сотрудников")
+    y_position = 740
+    c.setFont("DejaVu", 12)
+    c.drawString(60, y_position, "Выявленные нарушения в расчете продуктивности рабочего дня:")
+    y_position -= 30
+    max_width = 480  # ширина строки в пикселях
+    if not productivity_violations or len(productivity_violations) == 0:
+        c.drawString(60, y_position, "Нарушения не добавлены.")
+    else:
+        for idx, violation in enumerate(productivity_violations):
+            text = violation.get('employee', '')
+            lines = []
+            for paragraph in text.split('\n'):
+                wrapped = simpleSplit(paragraph, "DejaVu", 12, max_width)
+                lines.extend(wrapped if wrapped else [''])
+            c.drawString(60, y_position, f"{idx+1}.")
+            x_text = 80
+            for line in lines:
+                c.drawString(x_text, y_position, line)
+                y_position -= 16
+                if y_position < 60:
+                    c.showPage()
+                    y_position = 780
+                    c.setFont("DejaVu", 12)
+            y_position -= 4
+    c.save()
+    buffer.seek(0)
+    return buffer
+
 def generate_full_pdf_from_data(org_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
                                  num_licenses, control_list_data, num_incidents_section1, num_blocked_resources,
                                  num_unidentified_carriers, num_info_messages, num_controlled_docs, num_time_violations,
-                                 incidents_section2, control_objects=None, *args):
+                                 incidents_section2, control_objects=None, productivity_violations=None, *args):
     org_name = db.get_organization_by_id(org_id)
     executor_full_name_for_main_page = db.get_executor_by_id(executor_id, include_position=False)
     executor_position_for_section1 = db.get_executor_position_by_id(executor_id)
@@ -561,6 +597,15 @@ def generate_full_pdf_from_data(org_id, start_date, end_date, executor_id, proje
             section3_overlay_page = section3_overlay_pdf.pages[0]
             section3_template_page.merge_page(section3_overlay_page)
             writer.add_page(section3_template_page)
+
+    # --- Раздел IV (продуктивность сотрудников) ---
+    section4_overlay_buffer = create_section4_overlay(productivity_violations or [])
+    section4_overlay_pdf = PdfReader(section4_overlay_buffer)
+    section4_template_pdf = PdfReader(section1_template_path)
+    section4_template_page = section4_template_pdf.pages[0]
+    section4_overlay_page = section4_overlay_pdf.pages[0]
+    section4_template_page.merge_page(section4_overlay_page)
+    writer.add_page(section4_template_page)
 
     # Создаем буфер для записи PDF
     output_buffer = BytesIO()

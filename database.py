@@ -113,6 +113,7 @@ def init_db():
                   selected_threat_direction TEXT,
                   external_disks_table_json TEXT,
                   external_control_objects_json TEXT,
+                  productivity_violations_json TEXT,
                   FOREIGN KEY (organization_id) REFERENCES organizations (id),
                   FOREIGN KEY (executor_id) REFERENCES executors (id),
                   FOREIGN KEY (project_manager_id) REFERENCES project_managers (id),
@@ -168,6 +169,12 @@ def init_db():
     columns = [col[1] for col in c.fetchall()]
     if "external_control_objects_json" not in columns:
         c.execute("ALTER TABLE reports ADD COLUMN external_control_objects_json TEXT")
+    
+    # Миграция: добавление поля productivity_violations_json для раздела IV
+    c.execute("PRAGMA table_info(reports)")
+    columns = [col[1] for col in c.fetchall()]
+    if "productivity_violations_json" not in columns:
+        c.execute("ALTER TABLE reports ADD COLUMN productivity_violations_json TEXT")
     
     # Добавление ролей по умолчанию
     c.execute("INSERT OR IGNORE INTO roles (name) VALUES ('Администратор'), ('Пользователь')")
@@ -490,7 +497,7 @@ def add_report(organization_id, start_date, end_date, executor_id, project_manag
 def add_full_report(
     organization_id, start_date, end_date, executor_id, project_manager_id, report_filename, contract_id,
     num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
-    num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json, fio_external, external_disks_table_json, external_control_objects_json
+    num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json, fio_external, external_disks_table_json, external_control_objects_json, productivity_violations_json=None
 ):
     conn = sqlite3.connect('report.db')
     c = conn.cursor()
@@ -499,14 +506,14 @@ def add_full_report(
         num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
         num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json,
         external_control_object, fio_external, external_disks_list,
-        incidents_section2, selected_threat_direction, external_disks_table_json, external_control_objects_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        incidents_section2, selected_threat_direction, external_disks_table_json, external_control_objects_json, productivity_violations_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         (
             organization_id, start_date, end_date, executor_id, project_manager_id, contract_id, report_filename,
             num_licenses, control_list_json, num_incidents_section1, num_blocked_resources, num_unidentified_carriers,
             num_info_messages, num_controlled_docs, num_time_violations, incidents_section2_json,
             None, fio_external, None,
-            None, None, external_disks_table_json, external_control_objects_json
+            None, None, external_disks_table_json, external_control_objects_json, productivity_violations_json
         )
     )
     conn.commit()
