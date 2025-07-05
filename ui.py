@@ -54,7 +54,7 @@ def display_login_form():
                 st.error("Неверный логин или пароль")
 
 def display_sidebar():
-    st.sidebar.image("rv_group_logo.jpg")
+    st.sidebar.image("images/rv_group_logo.jpg")
     st.sidebar.write(f"Текущий пользователь: {st.session_state.current_user}")
 
     st.sidebar.markdown(
