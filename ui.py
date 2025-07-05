@@ -466,9 +466,9 @@ def display_report_form():
         with st.form(f"add_external_disk_row_form_{idx}", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
-                new_date = st.date_input("Дата", value=datetime.date.today(), key=f"external_disk_date_{idx}")
+                new_date = st.date_input("Дата", value=dt.date.today(), key=f"external_disk_date_{idx}")
             with col2:
-                new_time = st.time_input("Время", value=datetime.datetime.now().time(), key=f"external_disk_time_{idx}")
+                new_time = st.time_input("Время", value=dt.datetime.now().time(), key=f"external_disk_time_{idx}")
             new_type = st.text_input("Тип события", key=f"external_disk_type_{idx}")
             new_pc = st.text_input("Компьютер", key=f"external_disk_pc_{idx}")
             new_user = st.text_input("Пользователь", key=f"external_disk_user_{idx}")
@@ -1082,17 +1082,19 @@ def display_role_permissions_management():
         'Выход'
     ]
 
-    new_permissions = {}
-    for item in all_menu_items:
-        default_value = current_permissions_dict.get(item, False)
-        new_permissions[item] = st.checkbox(f"Разрешить доступ к: {item}", value=default_value)
+    with st.form("role_permissions_form"):
+        new_permissions = {}
+        for item in all_menu_items:
+            default_value = current_permissions_dict.get(item, False)
+            new_permissions[item] = st.checkbox(f"Разрешить доступ к: {item}", value=default_value)
 
-    if st.button("Сохранить полномочия"):
-        # Преобразуем булевы значения в 0 или 1
-        permissions_to_save = {item: (1 if allowed else 0) for item, allowed in new_permissions.items()}
-        db.set_role_permissions(selected_role_id, permissions_to_save)
-        st.success("Полномочия успешно обновлены!")
-        st.rerun()
+        save_permissions = st.form_submit_button("Сохранить полномочия")
+        if save_permissions:
+            # Преобразуем булевы значения в 0 или 1
+            permissions_to_save = {item: (1 if allowed else 0) for item, allowed in new_permissions.items()}
+            db.set_role_permissions(selected_role_id, permissions_to_save)
+            st.success("Полномочия успешно обновлены!")
+            st.rerun()
 
 def display_position_management():
     st.title("Ведение должностей")
