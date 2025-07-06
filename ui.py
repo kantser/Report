@@ -147,9 +147,20 @@ def display_sidebar():
 
 def display_home_page():
     st.title("Главная страница")
-    if st.button("Сформировать отчет"):
-        st.session_state.menu_choice = "Формирование отчета"
-        st.rerun()
+    # Кнопка "Сформировать отчет"
+    form_report_clicked = st.button("Сформировать отчет")
+    if form_report_clicked:
+        # Проверка полномочий
+        user_roles = db.get_user_roles(st.session_state.current_user_id) if hasattr(st.session_state, 'current_user_id') else []
+        user_role_ids = [r[0] for r in user_roles]
+        allowed_perms = set()
+        for role_id in user_role_ids:
+            allowed_perms.update(db.get_allowed_menu_items_for_role(role_id))
+        if 'Сформировать отчет' in allowed_perms:
+            st.session_state.menu_choice = "Формирование отчета"
+            st.rerun()
+        else:
+            st.warning("У вас нет полномочий для этого действия. Обратитесь к администратору.")
 
     reports = db.get_all_reports()
     
@@ -267,9 +278,16 @@ def display_home_page():
                     elif not isinstance(table, list):
                         obj['external_disks_table'] = []
 
-                col1, col2 = st.columns(2, gap="small")
+                # Получаем id текущего пользователя и его роли
+                user_roles = db.get_user_roles(st.session_state.current_user_id) if hasattr(st.session_state, 'current_user_id') else []
+                user_role_ids = [r[0] for r in user_roles]
+                allowed_perms = set()
+                for role_id in user_role_ids:
+                    allowed_perms.update(db.get_allowed_menu_items_for_role(role_id))
+
+                col1, col2, col3 = st.columns(3, gap="small")
                 with col1:
-                    st.download_button(
+                    download_clicked = st.download_button(
                         label=f"Скачать отчет {selected_report_id} в PDF",
                         data=pdf_output,
                         file_name=report_filename,
@@ -277,11 +295,24 @@ def display_home_page():
                         key=f"download_selected_report_{selected_report_id}",
                         use_container_width=True
                     )
+                    if download_clicked and 'Скачать отчет' not in allowed_perms:
+                        st.warning("У вас нет полномочий для этого действия. Обратитесь к администратору.")
                 with col2:
-                    if st.button(f"Удалить отчет {selected_report_id}", key=f"delete_selected_report_{selected_report_id}", use_container_width=True):
-                        db.delete_report(selected_report_id)
-                        st.success(f"Отчет {selected_report_id} успешно удален.")
-                        st.rerun()
+                    edit_clicked = st.button(f"Редактировать отчет {selected_report_id}", key=f"edit_selected_report_{selected_report_id}", use_container_width=True)
+                    if edit_clicked:
+                        if 'Редактировать отчет' in allowed_perms:
+                            st.info("Функция редактирования отчетов будет доступна в ближайшее время!")
+                        else:
+                            st.warning("У вас нет полномочий для этого действия. Обратитесь к администратору.")
+                with col3:
+                    delete_clicked = st.button(f"Удалить отчет {selected_report_id}", key=f"delete_selected_report_{selected_report_id}", use_container_width=True)
+                    if delete_clicked:
+                        if 'Удалить отчет' in allowed_perms:
+                            db.delete_report(selected_report_id)
+                            st.success(f"Отчет {selected_report_id} успешно удален.")
+                            st.rerun()
+                        else:
+                            st.warning("У вас нет полномочий для этого действия. Обратитесь к администратору.")
             else:
                 st.error("Не удалось получить данные отчета.")
         else:
@@ -1091,6 +1122,14 @@ def display_role_permissions_management():
         for item in all_menu_items:
             default_value = current_permissions_dict.get(item, False)
             new_permissions[item] = st.checkbox(f"Разрешить доступ к: {item}", value=default_value)
+
+        # --- Отдельный блок для полномочий по отчетам ---
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown("<b>Полномочия для работы с отчетами:</b>", unsafe_allow_html=True)
+        report_perms = ['Скачать отчет', 'Редактировать отчет', 'Удалить отчет', 'Сформировать отчет']
+        for perm in report_perms:
+            default_value = current_permissions_dict.get(perm, False)
+            new_permissions[perm] = st.checkbox(f"Разрешить: {perm}", value=default_value)
 
         save_permissions = st.form_submit_button("Сохранить полномочия")
         if save_permissions:

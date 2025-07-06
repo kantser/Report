@@ -201,9 +201,21 @@ def init_db():
     admin_role_id = c.fetchone()[0]
     c.execute("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)", (admin_user_id, admin_role_id))
     
-    # Получаем id роли 'Администратор'
-    c.execute("SELECT id FROM roles WHERE name = 'Администратор'")
-    admin_role_id = c.fetchone()[0]
+    # Добавляем полномочия для отчетов (по умолчанию только админу)
+    report_permissions = [
+        ('Скачать отчет', 1),
+        ('Редактировать отчет', 1),
+        ('Удалить отчет', 1),
+        ('Сформировать отчет', 1)
+    ]
+    for perm, allowed in report_permissions:
+        c.execute("INSERT OR IGNORE INTO role_permissions (role_id, menu_item, allowed) VALUES (?, ?, ?)", (admin_role_id, perm, allowed))
+    conn.commit()
+    
+    # Получаем id роли 'Пользователь'
+    c.execute("SELECT id FROM roles WHERE name = 'Пользователь'")
+    user_role_id = c.fetchone()[0]
+
     # Список всех пунктов меню
     menu_items = [
         'Главная страница',
@@ -222,14 +234,6 @@ def init_db():
     # Для администратора разрешить все
     for item in menu_items:
         c.execute("INSERT OR IGNORE INTO role_permissions (role_id, menu_item, allowed) VALUES (?, ?, 1)", (admin_role_id, item))
-    
-    # Получаем id роли 'Пользователь'
-    c.execute("SELECT id FROM roles WHERE name = 'Пользователь'")
-    user_role_id = c.fetchone()[0]
-
-    # Для пользователя запретить все по умолчанию
-    for item in menu_items:
-        c.execute("INSERT OR IGNORE INTO role_permissions (role_id, menu_item, allowed) VALUES (?, ?, 0)", (user_role_id, item))
     
     conn.commit()
     conn.close()
