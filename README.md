@@ -134,3 +134,80 @@
 *   **Пароль:** `admin`
 
 Вы можете использовать эти данные для входа в систему и дальнейшего управления пользователями, ролями и справочниками. 
+
+## Установка приложения на сервер
+Подготовка сервера
+
+Установка Ubuntu Server 22.04  и выше.
+1. Обновите систему
+   
+sudo apt update && sudo apt upgrade -y
+
+2. Установите Python и pip
+   
+sudo apt install -y python3 python3-pip 
+
+3. Установите Python и pip
+   
+sudo apt install -y python3 python3-pip
+
+## Установка Streamlit
+
+В новых версиях Ubuntu 23.10+ и Debian 12+ Python по умолчанию запрещает глобальную установку пакетов через pip, чтобы избежать конфликтов с системными пакетами.
+Создаем виртуальное окружение
+
+python3 -m venv ~/venv-streamlit
+source ~/venv-streamlit/bin/activate
+
+Проверьте версию:
+
+streamlit --version 
+
+Загрузка проекта на сервер
+
+git clone https://github.com/kantser/Report 
+
+Заходим в папку 
+
+cd Report
+
+Установка зависимостей
+
+pip install --no-cache-dir -r requirements.txt
+
+Запуск Streamlit
+
+
+Тестовый запуск (проверка)
+
+streamlit run app.py --server.port=8501
+
+После этого откройте в браузере:
+
+http://server_ip:8501
+
+⚠️ Если порт недоступен, проверьте фаервол:
+
+sudo ufw allow 8501
+
+Остановите тестовый запуск (Ctrl+C в терминале).
+
+Настройка автозапуска через Systemd
+
+sudo nano /etc/systemd/system/streamlit.service
+
+Вставьте конфиг (замените пути и пользователя!):
+
+[Unit]
+Description=Streamlit Production Server
+After=network.target
+
+[Service]
+User=support  # Ваш пользователь
+WorkingDirectory=/home/support/Report  # Путь к проекту
+ExecStart=/usr/local/bin/streamlit run app.py --server.port=8501 --server.headless=true
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
