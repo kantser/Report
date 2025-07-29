@@ -140,64 +140,64 @@
 
 Установка Ubuntu Server 22.04  и выше.
 1. Обновите систему
-   
+```bash      
 sudo apt update && sudo apt upgrade -y
-
+```
 2. Установите Python и pip
-   
+```bash     
 sudo apt install -y python3 python3-pip 
-
+```
 3. Установите Python и pip
-   
+```bash     
 sudo apt install -y python3 python3-pip
-
+```
 ## Установка Streamlit
 
 В новых версиях Ubuntu 23.10+ и Debian 12+ Python по умолчанию запрещает глобальную установку пакетов через pip, чтобы избежать конфликтов с системными пакетами.
 Создаем виртуальное окружение
-
+```bash
 python3 -m venv ~/venv-streamlit
 source ~/venv-streamlit/bin/activate
-
+```
 Проверьте версию:
-
+```bash
 streamlit --version 
-
+```
 Загрузка проекта на сервер
-
+```bash
 git clone https://github.com/kantser/Report 
-
+```
 Заходим в папку 
-
+```bash
 cd Report
-
+```
 Установка зависимостей
-
+```bash
 pip install --no-cache-dir -r requirements.txt
-
+```
 Запуск Streamlit
 
 
 Тестовый запуск (проверка)
-
+```bash
 streamlit run app.py --server.port=8501
-
+```
 После этого откройте в браузере:
 
-http://server_ip:8501
+http://server_ip:8501 # Укажите ваш IP
 
 ⚠️ Если порт недоступен, проверьте фаервол:
-
+```bash
 sudo ufw allow 8501
-
+```
 Остановите тестовый запуск (Ctrl+C в терминале).
 
 Настройка автозапуска через Systemd
-
+```bash
 sudo nano /etc/systemd/system/streamlit.service
-
+```
 Вставьте конфиг (замените пути и пользователя!):
-
+```bash
 [Unit]
 Description=Streamlit Production Server
 After=network.target
@@ -210,4 +210,4 @@ Restart=always
 
 [Install]
 WantedBy=multi-user.target
-
+```
