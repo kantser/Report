@@ -159,6 +159,11 @@ sudo apt install -y python3 python3-pip
 python3 -m venv ~/venv-streamlit
 source ~/venv-streamlit/bin/activate
 ```
+Устанавливаем Streamlit
+```bash
+pip install streamlit
+```
+
 Проверьте версию:
 ```bash
 streamlit --version 
